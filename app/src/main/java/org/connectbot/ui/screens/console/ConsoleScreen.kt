@@ -74,6 +74,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -534,16 +535,14 @@ fun ConsoleScreen(
     var titleBarHide by remember { mutableStateOf(prefs.getBoolean(PreferenceConstants.TITLEBARHIDE, false)) }
     val volumeKeysChangeFontSize = remember { prefs.getBoolean(PreferenceConstants.VOLUME_FONT, true) }
     val keepScreenAwake = remember { prefs.getBoolean(PreferenceConstants.KEEP_ALIVE, true) }
-    val swipeLeftParsed = remember {
-        SwipeKeySequenceParser.parse(
-            prefs.getString(PreferenceConstants.SWIPE_LEFT_KEYS, "") ?: ""
-        )
+    val swipeLeftRaw = remember {
+        prefs.getString(PreferenceConstants.SWIPE_LEFT_KEYS, "") ?: ""
     }
-    val swipeRightParsed = remember {
-        SwipeKeySequenceParser.parse(
-            prefs.getString(PreferenceConstants.SWIPE_RIGHT_KEYS, "") ?: ""
-        )
+    val swipeRightRaw = remember {
+        prefs.getString(PreferenceConstants.SWIPE_RIGHT_KEYS, "") ?: ""
     }
+    val swipeLeftParsed = remember(swipeLeftRaw) { SwipeKeySequenceParser.parse(swipeLeftRaw) }
+    val swipeRightParsed = remember(swipeRightRaw) { SwipeKeySequenceParser.parse(swipeRightRaw) }
 
     // Keyboard state
     val hasHardwareKeyboard = rememberHasHardwareKeyboard()
@@ -568,6 +567,7 @@ fun ConsoleScreen(
 
     var forceSize: Pair<Int, Int>? by remember { mutableStateOf(null) }
 
+    var swipeOverlayLabel by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var showUrlScanDialog by remember { mutableStateOf(false) }
     var showResizeDialog by remember { mutableStateOf(false) }
@@ -954,7 +954,13 @@ fun ConsoleScreen(
                         val terminalModifier = sessionSwipeModifier.swipeKeyGesture(
                             leftKeys = swipeLeftParsed,
                             rightKeys = swipeRightParsed,
-                            onSwipe = { keys -> bridge.injectString(keys) },
+                            onSwipe = { keys ->
+                                bridge.injectString(keys)
+                                swipeOverlayLabel = when (keys) {
+                                    swipeLeftParsed -> swipeLeftRaw
+                                    else -> swipeRightRaw
+                                }
+                            },
                         )
 
                         key(bridge.host.id) {
@@ -989,6 +995,13 @@ fun ConsoleScreen(
                                 terminalModifier = terminalModifier,
                             )
                         }
+
+                        // Swipe gesture key sequence overlay
+                        SwipeKeyOverlay(
+                            label = swipeOverlayLabel,
+                            onDismiss = { swipeOverlayLabel = null },
+                            modifier = Modifier.align(Alignment.Center)
+                        )
                     }
                 }
             }
@@ -1319,6 +1332,41 @@ fun ConsoleScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SwipeKeyOverlay(
+    label: String?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    LaunchedEffect(label) {
+        if (label != null) {
+            delay(800)
+            currentOnDismiss()
+        }
+    }
+
+    AnimatedVisibility(
+        visible = label != null,
+        enter = fadeIn(animationSpec = tween(durationMillis = 100)),
+        exit = fadeOut(animationSpec = tween(durationMillis = 300)),
+        modifier = modifier
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.85f),
+            tonalElevation = 4.dp
+        ) {
+            Text(
+                text = label ?: "",
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+            )
         }
     }
 }
