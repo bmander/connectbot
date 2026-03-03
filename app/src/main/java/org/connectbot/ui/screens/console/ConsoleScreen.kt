@@ -31,7 +31,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -149,6 +148,7 @@ import org.connectbot.util.PreferenceConstants
 import org.connectbot.util.SwipeKeySequenceParser
 import org.connectbot.util.UrlUtils
 import org.connectbot.util.rememberTerminalTypefaceResultFromStoredValue
+import org.connectbot.util.swipeKeyGesture
 import timber.log.Timber
 import kotlin.math.abs
 import kotlin.math.max
@@ -535,10 +535,14 @@ fun ConsoleScreen(
     val volumeKeysChangeFontSize = remember { prefs.getBoolean(PreferenceConstants.VOLUME_FONT, true) }
     val keepScreenAwake = remember { prefs.getBoolean(PreferenceConstants.KEEP_ALIVE, true) }
     val swipeLeftParsed = remember {
-        SwipeKeySequenceParser.parse(prefs.getString(PreferenceConstants.SWIPE_LEFT_KEYS, "") ?: "")
+        SwipeKeySequenceParser.parse(
+            prefs.getString(PreferenceConstants.SWIPE_LEFT_KEYS, "") ?: ""
+        )
     }
     val swipeRightParsed = remember {
-        SwipeKeySequenceParser.parse(prefs.getString(PreferenceConstants.SWIPE_RIGHT_KEYS, "") ?: "")
+        SwipeKeySequenceParser.parse(
+            prefs.getString(PreferenceConstants.SWIPE_RIGHT_KEYS, "") ?: ""
+        )
     }
 
     // Keyboard state
@@ -947,29 +951,10 @@ fun ConsoleScreen(
                         }
                         // Session swipe navigation consumes horizontal drags during the
                         // Initial pass, so it takes precedence when both are enabled.
-                        val terminalModifier = sessionSwipeModifier.then(
-                            if (swipeLeftParsed.isNotEmpty() || swipeRightParsed.isNotEmpty()) {
-                                Modifier.pointerInput(swipeLeftParsed, swipeRightParsed) {
-                                    val thresholdPx = 100.dp.toPx()
-                                    var totalDragX = 0f
-                                    detectHorizontalDragGestures(
-                                        onDragStart = { totalDragX = 0f },
-                                        onDragEnd = {
-                                            if (totalDragX < -thresholdPx && swipeLeftParsed.isNotEmpty()) {
-                                                bridge.injectString(swipeLeftParsed)
-                                            } else if (totalDragX > thresholdPx && swipeRightParsed.isNotEmpty()) {
-                                                bridge.injectString(swipeRightParsed)
-                                            }
-                                        },
-                                        onDragCancel = { totalDragX = 0f },
-                                        onHorizontalDrag = { _, dragAmount ->
-                                            totalDragX += dragAmount
-                                        }
-                                    )
-                                }
-                            } else {
-                                Modifier
-                            }
+                        val terminalModifier = sessionSwipeModifier.swipeKeyGesture(
+                            leftKeys = swipeLeftParsed,
+                            rightKeys = swipeRightParsed,
+                            onSwipe = { keys -> bridge.injectString(keys) },
                         )
 
                         key(bridge.host.id) {
