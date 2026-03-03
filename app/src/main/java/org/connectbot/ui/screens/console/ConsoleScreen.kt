@@ -31,6 +31,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -145,6 +146,7 @@ import org.connectbot.ui.components.TerminalKeyboard
 import org.connectbot.ui.components.UrlScanDialog
 import org.connectbot.ui.theme.terminal
 import org.connectbot.util.PreferenceConstants
+import org.connectbot.util.SwipeKeySequenceParser
 import org.connectbot.util.UrlUtils
 import org.connectbot.util.rememberTerminalTypefaceResultFromStoredValue
 import timber.log.Timber
@@ -532,6 +534,12 @@ fun ConsoleScreen(
     var titleBarHide by remember { mutableStateOf(prefs.getBoolean(PreferenceConstants.TITLEBARHIDE, false)) }
     val volumeKeysChangeFontSize = remember { prefs.getBoolean(PreferenceConstants.VOLUME_FONT, true) }
     val keepScreenAwake = remember { prefs.getBoolean(PreferenceConstants.KEEP_ALIVE, true) }
+    val swipeLeftParsed = remember {
+        SwipeKeySequenceParser.parse(prefs.getString(PreferenceConstants.SWIPE_LEFT_KEYS, "") ?: "")
+    }
+    val swipeRightParsed = remember {
+        SwipeKeySequenceParser.parse(prefs.getString(PreferenceConstants.SWIPE_RIGHT_KEYS, "") ?: "")
+    }
 
     // Keyboard state
     val hasHardwareKeyboard = rememberHasHardwareKeyboard()
@@ -926,7 +934,7 @@ fun ConsoleScreen(
                             .weight(1f),
                     ) {
                         val bridge = uiState.bridges[uiState.currentBridgeIndex]
-                        val terminalModifier = if (swipeBetweenSessions) {
+                        val sessionSwipeModifier = if (swipeBetweenSessions) {
                             Modifier.sessionSwipeNavigation(
                                 currentIndex = uiState.currentBridgeIndex,
                                 sessionCount = uiState.bridges.size,
@@ -937,6 +945,32 @@ fun ConsoleScreen(
                         } else {
                             Modifier
                         }
+                        // Session swipe navigation consumes horizontal drags during the
+                        // Initial pass, so it takes precedence when both are enabled.
+                        val terminalModifier = sessionSwipeModifier.then(
+                            if (swipeLeftParsed.isNotEmpty() || swipeRightParsed.isNotEmpty()) {
+                                Modifier.pointerInput(swipeLeftParsed, swipeRightParsed) {
+                                    val thresholdPx = 100.dp.toPx()
+                                    var totalDragX = 0f
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { totalDragX = 0f },
+                                        onDragEnd = {
+                                            if (totalDragX < -thresholdPx && swipeLeftParsed.isNotEmpty()) {
+                                                bridge.injectString(swipeLeftParsed)
+                                            } else if (totalDragX > thresholdPx && swipeRightParsed.isNotEmpty()) {
+                                                bridge.injectString(swipeRightParsed)
+                                            }
+                                        },
+                                        onDragCancel = { totalDragX = 0f },
+                                        onHorizontalDrag = { _, dragAmount ->
+                                            totalDragX += dragAmount
+                                        }
+                                    )
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
 
                         key(bridge.host.id) {
                             ConsoleTerminalPage(
