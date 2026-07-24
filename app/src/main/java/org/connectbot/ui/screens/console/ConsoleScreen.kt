@@ -1000,7 +1000,7 @@ fun ConsoleScreen(
                         SwipeKeyOverlay(
                             label = swipeOverlayLabel,
                             onDismiss = { swipeOverlayLabel = null },
-                            modifier = Modifier.align(Alignment.Center)
+                            modifier = Modifier.align(Alignment.Center),
                         )
                     }
                 }
@@ -1340,7 +1340,7 @@ fun ConsoleScreen(
 private fun SwipeKeyOverlay(
     label: String?,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     LaunchedEffect(label) {
@@ -1354,18 +1354,18 @@ private fun SwipeKeyOverlay(
         visible = label != null,
         enter = fadeIn(animationSpec = tween(durationMillis = 100)),
         exit = fadeOut(animationSpec = tween(durationMillis = 300)),
-        modifier = modifier
+        modifier = modifier,
     ) {
         Surface(
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.85f),
-            tonalElevation = 4.dp
+            tonalElevation = 4.dp,
         ) {
             Text(
                 text = label ?: "",
                 color = MaterialTheme.colorScheme.inverseOnSurface,
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
             )
         }
     }

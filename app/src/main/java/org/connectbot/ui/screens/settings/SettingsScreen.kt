@@ -555,7 +555,7 @@ fun SettingsScreenContent(
                     "Ctrl+B P" to "Ctrl+B P",
                     "Ctrl+B N" to "Ctrl+B N",
                     "Ctrl+A P" to "Ctrl+A P",
-                    "Ctrl+A N" to "Ctrl+A N"
+                    "Ctrl+A N" to "Ctrl+A N",
                 )
                 val swipeCustomLabel = stringResource(R.string.swipe_keys_custom)
                 val swipeNoneLabel = stringResource(R.string.swipe_keys_none)
@@ -566,7 +566,7 @@ fun SettingsScreenContent(
                     value = uiState.swipeLeftKeys,
                     entries = swipeKeyPresets,
                     onValueChange = onSwipeLeftKeysChange,
-                    customLabel = swipeCustomLabel
+                    customLabel = swipeCustomLabel,
                 )
 
                 ListPreferenceWithCustom(
@@ -575,7 +575,7 @@ fun SettingsScreenContent(
                     value = uiState.swipeRightKeys,
                     entries = swipeKeyPresets,
                     onValueChange = onSwipeRightKeysChange,
-                    customLabel = swipeCustomLabel
+                    customLabel = swipeCustomLabel,
                 )
             }
 

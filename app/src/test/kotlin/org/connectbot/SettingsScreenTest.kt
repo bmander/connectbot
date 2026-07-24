@@ -303,6 +303,8 @@ class SettingsScreenTest {
                     onBellVolumeChange = {},
                     onBellVibrateChange = {},
                     onBellNotificationChange = {},
+                    onSwipeLeftKeysChange = {},
+                    onSwipeRightKeysChange = {},
                 )
             }
         }
