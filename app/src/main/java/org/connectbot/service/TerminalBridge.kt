@@ -202,6 +202,23 @@ class TerminalBridge {
     private val _progressState = MutableStateFlow<ProgressInfo?>(null)
     val progressState: StateFlow<ProgressInfo?> = _progressState.asStateFlow()
 
+    private val connectionTracker = ConnectionProgressTracker()
+
+    /**
+     * Progress of the connection *handshake* — which phase of connecting we are in.
+     *
+     * Not to be confused with [progressState], which reports progress of whatever is
+     * running inside an already-established shell via OSC 9;4. The two are unrelated
+     * and can be active at different times.
+     */
+    val connectionProgress: StateFlow<ConnectionProgress?> = connectionTracker.progress
+
+    private var connectJob: Job? = null
+    private var watchdogJob: Job? = null
+
+    @Volatile
+    private var connectAbandoned = false
+
     var disconnected = false
         private set
     var connecting = false
@@ -485,6 +502,26 @@ class TerminalBridge {
     }
 
     /**
+     * Report which phase of connecting we have reached.
+     *
+     * Transports call this alongside the [outputLine] calls they already make. A
+     * transport that never calls it still works — the overlay just shows a single
+     * indeterminate stage — so instrumenting a transport is optional.
+     */
+    fun reportConnectionStage(stage: ConnectionStage, detail: String? = null) {
+        connectionTracker.enter(stage, detail)
+    }
+
+    /**
+     * Bracket a wait on user input, so stage timeouts are suspended while a human is
+     * being waited on. Callers must pair this in a `finally`; leaving it set would
+     * disarm the watchdog for the rest of the attempt.
+     */
+    fun reportConnectionWaitingOnUser(waiting: Boolean) {
+        connectionTracker.setWaitingOnUser(waiting)
+    }
+
+    /**
      * Spawn thread to open connection and start login process.
      */
     fun startConnection() {
@@ -494,6 +531,8 @@ class TerminalBridge {
             return
         }
         connecting = true
+        connectAbandoned = false
+        connectionTracker.begin()
 
         transport = newTransport
         newTransport.bridge = this
@@ -509,7 +548,7 @@ class TerminalBridge {
 
         outputLine(manager.res.getString(R.string.terminal_connecting, host.hostname, host.port, host.protocol))
 
-        scope.launch(dispatchers.io) {
+        connectJob = scope.launch(dispatchers.io) {
             try {
                 if (newTransport.canForwardPorts()) {
                     try {
@@ -530,6 +569,10 @@ class TerminalBridge {
                 newTransport.connect()
             } catch (e: Exception) {
                 Timber.e(e, "Connection failed for ${host.nickname}")
+                connectionTracker.fail(
+                    connectionProgress.value?.stage ?: ConnectionStage.HANDSHAKING,
+                    e.message,
+                )
                 manager.reportError(
                     ServiceError.ConnectionFailed(
                         hostNickname = host.nickname,
@@ -537,6 +580,13 @@ class TerminalBridge {
                         reason = e.message ?: "Connection failed",
                     ),
                 )
+            } finally {
+                // The handshake may have kept running past an abandon: cancelling this
+                // coroutine cannot interrupt a blocking socket call, so whatever it
+                // eventually produced has to be closed here rather than leaked.
+                if (connectAbandoned || transport !== newTransport) {
+                    runCatching { newTransport.close() }
+                }
             }
         }
     }
@@ -639,9 +689,23 @@ class TerminalBridge {
      * Internal method to request actual PTY terminal once we've finished
      * authentication. If called before authenticated, it will just fail.
      */
-    fun onConnected() {
+    fun onConnected(caller: AbsTransport) {
+        // A blocking handshake cannot be interrupted, so an attempt the user
+        // abandoned may still succeed and call in here long afterwards. Letting it
+        // through would clear `disconnected`, start a Relay and notify about a bridge
+        // the manager has already dropped: a live session with nothing attached to
+        // it. Transport identity is attempt identity, since startConnection installs
+        // a fresh transport each time.
+        if (connectAbandoned || caller !== transport) {
+            Timber.i("Ignoring late connect for ${host.nickname}; the attempt was abandoned")
+            scope.launch(dispatchers.io) { runCatching { caller.close() } }
+            return
+        }
+
         disconnected = false
         connecting = false
+        watchdogJob?.cancel()
+        connectionTracker.succeed()
 
         // We no longer need our local output.
         localOutput.clear()
@@ -719,6 +783,15 @@ class TerminalBridge {
                 disconnectReason = reason
             }
         }
+
+        // Stop the stage watchdog and settle the progress overlay. Outcomes are
+        // sticky, so an explicit cancel or timeout recorded moments ago keeps its
+        // more specific wording rather than being overwritten here.
+        watchdogJob?.cancel()
+        connectionTracker.fail(
+            connectionProgress.value?.stage ?: ConnectionStage.HANDSHAKING,
+            null,
+        )
 
         // Cancel any pending prompts
         promptManager.cancelPrompt()

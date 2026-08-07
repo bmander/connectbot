@@ -125,7 +125,7 @@ class Telnet : AbsTransport {
             `is` = socket?.getInputStream()
             os = socket?.getOutputStream()
 
-            bridge?.onConnected()
+            bridge?.onConnected(this)
         } catch (e: UnknownHostException) {
             Timber.d(e, "IO Exception connecting to host")
             throw e

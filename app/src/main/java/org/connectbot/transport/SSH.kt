@@ -685,7 +685,7 @@ class SSH :
         val currentHost = host ?: return
         if (!currentHost.wantSession) {
             bridge?.outputLine(manager?.res?.getString(R.string.terminal_no_session))
-            bridge?.onConnected()
+            bridge?.onConnected(this)
             return
         }
 
@@ -705,7 +705,7 @@ class SSH :
 
             sessionOpen = true
 
-            bridge?.onConnected()
+            bridge?.onConnected(this)
         } catch (e1: IOException) {
             Timber.e(e1, "Problem while trying to create PTY in finishConnection()")
         }

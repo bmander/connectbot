@@ -81,7 +81,7 @@ class Local @VisibleForTesting constructor(private val killer: Killer) : AbsTran
         `is` = FileInputStream(shellFd)
         os = FileOutputStream(shellFd)
 
-        bridge?.onConnected()
+        bridge?.onConnected(this)
     }
 
     @Throws(IOException::class)
