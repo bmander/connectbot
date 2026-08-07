@@ -128,6 +128,7 @@ import kotlinx.coroutines.launch
 import org.connectbot.R
 import org.connectbot.data.entity.Host
 import org.connectbot.service.AuthBanner
+import org.connectbot.service.ConnectionOutcome
 import org.connectbot.service.DisconnectReason
 import org.connectbot.service.PromptRequest
 import org.connectbot.service.TerminalBridge
@@ -464,15 +465,28 @@ private fun ConsoleTerminalPage(
             // underneath. Yields entirely while a prompt is up so InlinePrompt owns
             // the screen; the stage list comes back once the prompt is answered.
             val connectionProgress by bridge.connectionProgress.collectAsState()
+            val visibleConnectionProgress = connectionProgress.takeIf { promptState == null }
+
+            // A failed attempt keeps the card up carrying its own Close/Retry, so the
+            // reconnect sheet would be a second copy of the same two actions. Note a
+            // succeeded attempt leaves a non-null snapshot behind forever, so this
+            // has to test the outcome rather than merely null-checking the progress —
+            // otherwise a session that connected and later dropped would never get
+            // the reconnect sheet at all.
+            val connectionCardVisible = visibleConnectionProgress != null &&
+                visibleConnectionProgress.outcome !is ConnectionOutcome.Succeeded
 
             ConnectionProgressOverlay(
-                progress = connectionProgress.takeIf { promptState == null },
+                progress = visibleConnectionProgress,
                 onCancel = onCancelConnection,
+                onRetry = onReconnect,
+                onClose = onDisconnectRequest,
                 modifier = Modifier.align(Alignment.Center),
             )
 
             AnimatedVisibility(
-                visible = bridge.isDisconnected && !bridge.isConnecting && promptState == null,
+                visible = bridge.isDisconnected && !bridge.isConnecting && promptState == null &&
+                    !connectionCardVisible,
                 enter = slideInVertically(initialOffsetY = { it }),
                 exit = slideOutVertically(targetOffsetY = { it }),
                 modifier = Modifier.align(Alignment.BottomCenter),

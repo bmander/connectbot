@@ -23,6 +23,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +85,8 @@ private val CARD_WIDTH = 290.dp
 
 const val TAG_CONNECTION_PROGRESS_OVERLAY = "connection_progress_overlay"
 const val TAG_CONNECTION_PROGRESS_CANCEL = "connection_progress_cancel"
+const val TAG_CONNECTION_PROGRESS_RETRY = "connection_progress_retry"
+const val TAG_CONNECTION_PROGRESS_CLOSE = "connection_progress_close"
 
 /**
  * Shows which phase of connecting is underway, and offers a way out of one that is
@@ -95,6 +99,8 @@ const val TAG_CONNECTION_PROGRESS_CANCEL = "connection_progress_cancel"
 fun ConnectionProgressOverlay(
     progress: ConnectionProgress?,
     onCancel: () -> Unit,
+    onRetry: () -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Hold the overlay up briefly on success so the last tick is actually seen,
@@ -169,14 +175,44 @@ fun ConnectionProgressOverlay(
                     )
                 }
 
-                if (!snapshot.isFinished) {
-                    TextButton(
+                // The available action depends on where the attempt got to. While it
+                // is running the only thing to offer is a way out; once it has
+                // failed, cancelling is meaningless and what the user needs is to
+                // try again or give up. Leaving a finished attempt with no action at
+                // all strands them on a dead card with only the back arrow.
+                when {
+                    !snapshot.isFinished -> TextButton(
                         onClick = onCancel,
                         modifier = Modifier
                             .padding(top = 8.dp)
                             .testTag(TAG_CONNECTION_PROGRESS_CANCEL),
                     ) {
                         Text(text = stringResource(R.string.delete_neg))
+                    }
+
+                    snapshot.outcome is ConnectionOutcome.Succeeded -> Unit
+
+                    else -> Row(
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                    ) {
+                        TextButton(
+                            onClick = onClose,
+                            modifier = Modifier.testTag(TAG_CONNECTION_PROGRESS_CLOSE),
+                        ) {
+                            Text(text = stringResource(R.string.console_menu_close))
+                        }
+                        Button(
+                            onClick = onRetry,
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .testTag(TAG_CONNECTION_PROGRESS_RETRY),
+                        ) {
+                            Text(text = stringResource(R.string.console_menu_reconnect))
+                        }
                     }
                 }
             }

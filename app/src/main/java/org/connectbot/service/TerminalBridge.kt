@@ -532,6 +532,12 @@ class TerminalBridge {
         }
         connecting = true
         connectAbandoned = false
+        // Clear the previous attempt's terminal state. Without this a retry inherits
+        // `disconnected`, and dispatchDisconnect's guard against double teardown
+        // would then swallow the *new* attempt's failure — leaving the bridge stuck
+        // reporting itself as connecting for good.
+        disconnected = false
+        disconnectReason = DisconnectReason.UNKNOWN
         connectionTracker.begin()
 
         // Bound each phase. sshlib's own connect and kex timeouts are the only thing

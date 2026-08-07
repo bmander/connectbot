@@ -30,7 +30,9 @@ import org.connectbot.service.ConnectionProgress
 import org.connectbot.service.ConnectionStage
 import org.connectbot.ui.components.ConnectionProgressOverlay
 import org.connectbot.ui.components.TAG_CONNECTION_PROGRESS_CANCEL
+import org.connectbot.ui.components.TAG_CONNECTION_PROGRESS_CLOSE
 import org.connectbot.ui.components.TAG_CONNECTION_PROGRESS_OVERLAY
+import org.connectbot.ui.components.TAG_CONNECTION_PROGRESS_RETRY
 import org.connectbot.ui.theme.ConnectBotTheme
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -66,10 +68,22 @@ class ConnectionProgressOverlayTest {
         outcome = outcome,
     )
 
-    private fun setOverlay(value: ConnectionProgress?, onCancel: () -> Unit = {}) {
+    private fun timedOut() = ConnectionOutcome.TimedOut(ConnectionStage.HANDSHAKING, 30_000L)
+
+    private fun setOverlay(
+        value: ConnectionProgress?,
+        onCancel: () -> Unit = {},
+        onRetry: () -> Unit = {},
+        onClose: () -> Unit = {},
+    ) {
         composeTestRule.setContent {
             ConnectBotTheme {
-                ConnectionProgressOverlay(progress = value, onCancel = onCancel)
+                ConnectionProgressOverlay(
+                    progress = value,
+                    onCancel = onCancel,
+                    onRetry = onRetry,
+                    onClose = onClose,
+                )
             }
         }
     }
@@ -114,11 +128,69 @@ class ConnectionProgressOverlayTest {
     @Test
     fun cancelInvokesCallback() {
         var cancelled = false
-        setOverlay(progress(ConnectionStage.HANDSHAKING)) { cancelled = true }
+        setOverlay(progress(ConnectionStage.HANDSHAKING), onCancel = { cancelled = true })
 
         composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_CANCEL).performClick()
 
         assertTrue(cancelled)
+    }
+
+    // A finished attempt used to leave the card up with no action on it at all,
+    // stranding the user on a dead panel with only the back arrow.
+
+    @Test
+    fun failedAttemptOffersRetryAndClose() {
+        setOverlay(progress(ConnectionStage.HANDSHAKING, outcome = timedOut()))
+
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_RETRY).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_CLOSE).assertIsDisplayed()
+    }
+
+    @Test
+    fun retryInvokesCallback() {
+        var retried = false
+        setOverlay(
+            progress(ConnectionStage.HANDSHAKING, outcome = timedOut()),
+            onRetry = { retried = true },
+        )
+
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_RETRY).performClick()
+
+        assertTrue(retried)
+    }
+
+    @Test
+    fun closeInvokesCallback() {
+        var closed = false
+        setOverlay(
+            progress(ConnectionStage.HANDSHAKING, outcome = timedOut()),
+            onClose = { closed = true },
+        )
+
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_CLOSE).performClick()
+
+        assertTrue(closed)
+    }
+
+    @Test
+    fun cancelledAttemptAlsoOffersRetryAndClose() {
+        setOverlay(
+            progress(ConnectionStage.HANDSHAKING, outcome = ConnectionOutcome.Cancelled),
+        )
+
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_RETRY).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_CLOSE).assertIsDisplayed()
+    }
+
+    // Retry and Close are the failure actions; while an attempt is still running the
+    // only meaningful action is to abandon it.
+
+    @Test
+    fun retryAndCloseHiddenWhileConnecting() {
+        setOverlay(progress(ConnectionStage.HANDSHAKING))
+
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_RETRY).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_CLOSE).assertDoesNotExist()
     }
 
     // Once an attempt has ended there is nothing left to cancel, and offering the
