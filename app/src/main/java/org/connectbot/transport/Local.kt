@@ -24,6 +24,7 @@ import androidx.core.net.toUri
 import com.google.ase.Exec
 import org.connectbot.R
 import org.connectbot.data.entity.Host
+import org.connectbot.service.ConnectionStage
 import org.connectbot.service.DisconnectReason
 import timber.log.Timber
 import java.io.FileDescriptor
@@ -58,6 +59,8 @@ class Local @VisibleForTesting constructor(private val killer: Killer) : AbsTran
 
     override fun connect() {
         val pids = IntArray(1)
+
+        bridge?.reportConnectionStage(ConnectionStage.OPENING_SESSION)
 
         try {
             shellFd = Exec.createSubprocess("/system/bin/sh", "-", null, pids)

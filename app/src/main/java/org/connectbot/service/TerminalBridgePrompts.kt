@@ -28,6 +28,26 @@ import timber.log.Timber
  */
 
 /**
+ * Run [block] with connection stage timeouts suspended.
+ *
+ * Every prompt in this file goes through here, which is the point: a stage budget
+ * that kept counting while a human was being waited on would tear the connection
+ * down from under someone still typing their password. Putting the bracket here
+ * rather than at each transport call site means no transport can forget it.
+ *
+ * The `finally` matters as much as the call — a prompt that threw while leaving the
+ * flag set would disarm the watchdog for the remainder of the attempt.
+ */
+private fun <T> TerminalBridge.whileWaitingOnUser(block: () -> T): T {
+    reportConnectionWaitingOnUser(true)
+    return try {
+        block()
+    } finally {
+        reportConnectionWaitingOnUser(false)
+    }
+}
+
+/**
  * Request a boolean prompt (yes/no dialog).
  * This method updates both promptManager (for modern UI) and promptHelper (for backward compatibility).
  *
@@ -40,8 +60,10 @@ fun TerminalBridge.requestBooleanPrompt(
     message: String,
 ): Boolean? {
     return try {
-        runBlocking {
-            promptManager.requestBooleanPrompt(instructions, message)
+        whileWaitingOnUser {
+            runBlocking {
+                promptManager.requestBooleanPrompt(instructions, message)
+            }
         }
     } catch (e: CancellationException) {
         // Prompt was cancelled due to connection loss
@@ -65,8 +87,10 @@ fun TerminalBridge.requestStringPrompt(
     isPassword: Boolean = false,
 ): String? {
     return try {
-        runBlocking {
-            promptManager.requestStringPrompt(instructions, hint, isPassword)
+        whileWaitingOnUser {
+            runBlocking {
+                promptManager.requestStringPrompt(instructions, hint, isPassword)
+            }
         }
     } catch (e: CancellationException) {
         // Prompt was cancelled due to connection loss - throw IOException to propagate error
@@ -87,8 +111,10 @@ fun TerminalBridge.requestBiometricAuth(
     keystoreAlias: String,
 ): Boolean {
     return try {
-        runBlocking {
-            promptManager.requestBiometricAuth(keyNickname, keystoreAlias)
+        whileWaitingOnUser {
+            runBlocking {
+                promptManager.requestBiometricAuth(keyNickname, keystoreAlias)
+            }
         }
     } catch (e: CancellationException) {
         // Prompt was cancelled due to connection loss - throw IOException to propagate error
@@ -121,17 +147,19 @@ fun TerminalBridge.requestHostKeyFingerprintPrompt(
     md5: String,
 ): Boolean? {
     return try {
-        runBlocking {
-            promptManager.requestHostKeyFingerprintPrompt(
-                hostname,
-                keyType,
-                keySize,
-                serverHostKey,
-                randomArt,
-                bubblebabble,
-                sha256,
-                md5,
-            )
+        whileWaitingOnUser {
+            runBlocking {
+                promptManager.requestHostKeyFingerprintPrompt(
+                    hostname,
+                    keyType,
+                    keySize,
+                    serverHostKey,
+                    randomArt,
+                    bubblebabble,
+                    sha256,
+                    md5,
+                )
+            }
         }
     } catch (e: CancellationException) {
         // Prompt was cancelled due to connection loss - throw IOException to propagate error

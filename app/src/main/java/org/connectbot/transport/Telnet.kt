@@ -24,6 +24,7 @@ import androidx.core.net.toUri
 import de.mud.telnet.TelnetProtocolHandler
 import org.connectbot.R
 import org.connectbot.data.entity.Host
+import org.connectbot.service.ConnectionStage
 import org.connectbot.service.DisconnectReason
 import org.connectbot.service.TerminalBridge
 import org.connectbot.service.TerminalManager
@@ -118,13 +119,24 @@ class Telnet : AbsTransport {
             socket = Socket()
 
             val currentHost = host ?: return
-            tryAllAddresses(socket!!, currentHost.hostname, currentHost.port, currentHost.ipVersion)
+            bridge?.outputLine(
+                manager?.res?.getString(
+                    R.string.terminal_connecting,
+                    currentHost.hostname,
+                    currentHost.port,
+                    currentHost.protocol,
+                ),
+            )
+            tryAllAddresses(socket!!, currentHost.hostname, currentHost.port, currentHost.ipVersion) { stage ->
+                bridge?.reportConnectionStage(stage)
+            }
 
             connected = true
 
             `is` = socket?.getInputStream()
             os = socket?.getOutputStream()
 
+            bridge?.reportConnectionStage(ConnectionStage.OPENING_SESSION)
             bridge?.onConnected(this)
         } catch (e: UnknownHostException) {
             Timber.d(e, "IO Exception connecting to host")
@@ -270,7 +282,14 @@ class Telnet : AbsTransport {
         fun getProtocolName(): String = PROTOCOL
 
         @JvmStatic
-        private fun tryAllAddresses(sock: Socket, host: String, port: Int, ipVersion: String) {
+        private fun tryAllAddresses(
+            sock: Socket,
+            host: String,
+            port: Int,
+            ipVersion: String,
+            onStage: (ConnectionStage) -> Unit = {},
+        ) {
+            onStage(ConnectionStage.RESOLVING)
             val allAddresses = InetAddress.getAllByName(host)
             // Filter addresses based on IP version preference (unless hostname is a literal IP)
             val addresses = if (HostConstants.isIpAddress(host)) {
@@ -282,6 +301,7 @@ class Telnet : AbsTransport {
                     else -> allAddresses.toList()
                 }
             }
+            onStage(ConnectionStage.HANDSHAKING)
             for (addr in addresses) {
                 try {
                     // Without an explicit timeout this blocks until the OS gives up,
