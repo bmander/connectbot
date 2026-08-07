@@ -218,6 +218,75 @@ class ConnectionProgressTrackerTest {
         assertEquals(ConnectionOutcome.Cancelled, progress?.outcome)
     }
 
+    // Teardown reports a failure with nothing to say and often wins the race against
+    // the transport that actually knows the cause, so the reason has to be able to
+    // land afterwards or the card settles on a bare "Connection failed".
+
+    @Test
+    fun failureWithoutMessage_yieldsToOneWithAReason() {
+        tracker.begin()
+        tracker.fail(ConnectionStage.HANDSHAKING, null)
+
+        tracker.fail(ConnectionStage.HANDSHAKING, "The connect() operation timed out.")
+
+        assertEquals(
+            ConnectionOutcome.Failed(ConnectionStage.HANDSHAKING, "The connect() operation timed out."),
+            progress?.outcome,
+        )
+    }
+
+    @Test
+    fun failureWithoutMessage_yieldsToATimeout() {
+        tracker.begin()
+        tracker.fail(ConnectionStage.HANDSHAKING, null)
+
+        tracker.timeOut(ConnectionStage.HANDSHAKING, 30_000L)
+
+        assertEquals(
+            ConnectionOutcome.TimedOut(ConnectionStage.HANDSHAKING, 30_000L),
+            progress?.outcome,
+        )
+    }
+
+    @Test
+    fun failureWithAReason_isNotReplaced() {
+        tracker.begin()
+        tracker.fail(ConnectionStage.HANDSHAKING, "No route to host")
+
+        tracker.fail(ConnectionStage.HANDSHAKING, "something else")
+        tracker.fail(ConnectionStage.HANDSHAKING, null)
+
+        assertEquals(
+            ConnectionOutcome.Failed(ConnectionStage.HANDSHAKING, "No route to host"),
+            progress?.outcome,
+        )
+    }
+
+    @Test
+    fun blankMessage_countsAsNoReason() {
+        tracker.begin()
+        tracker.fail(ConnectionStage.HANDSHAKING, "   ")
+
+        tracker.fail(ConnectionStage.HANDSHAKING, "No route to host")
+
+        assertEquals(
+            ConnectionOutcome.Failed(ConnectionStage.HANDSHAKING, "No route to host"),
+            progress?.outcome,
+        )
+    }
+
+    // A cancel or a success is never displaced, however late a failure arrives.
+
+    @Test
+    fun cancellation_isNotReplacedByAFailure() {
+        tracker.begin()
+        tracker.cancel()
+
+        tracker.fail(ConnectionStage.HANDSHAKING, "No route to host")
+
+        assertEquals(ConnectionOutcome.Cancelled, progress?.outcome)
+    }
+
     @Test
     fun enter_afterFinish_isIgnored() {
         tracker.begin()

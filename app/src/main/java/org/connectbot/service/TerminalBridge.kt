@@ -513,6 +513,22 @@ class TerminalBridge {
     }
 
     /**
+     * Record why the attempt failed, in the transport's own words.
+     *
+     * Worth calling even though teardown records a failure anyway: that fallback has
+     * no message to give and the card can only say "Connection failed", while the
+     * transport knows it was, say, a connect timeout or no route to host. Outcomes
+     * are sticky, so reporting here before tearing down is what puts the specific
+     * reason on the card instead of the generic one.
+     */
+    fun reportConnectionFailure(message: String?) {
+        connectionTracker.fail(
+            connectionProgress.value?.stage ?: ConnectionStage.HANDSHAKING,
+            message,
+        )
+    }
+
+    /**
      * Bracket a wait on user input, so stage timeouts are suspended while a human is
      * being waited on. Callers must pair this in a `finally`; leaving it set would
      * disarm the watchdog for the rest of the attempt.

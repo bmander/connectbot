@@ -1078,9 +1078,11 @@ class SSH :
 
             // Display the reason in the text.
             var t: Throwable? = e
+            var firstMessage: String? = null
             while (t != null) {
                 val message = t.message
                 if (message != null) {
+                    if (firstMessage == null) firstMessage = message
                     bridge?.outputLine(message)
                     if (t is NoRouteToHostException) {
                         bridge?.outputLine(manager?.res?.getString(R.string.terminal_no_route))
@@ -1088,6 +1090,12 @@ class SSH :
                 }
                 t = t.cause
             }
+
+            // This catch does not rethrow, so the bridge's own handler never sees the
+            // exception and teardown would otherwise record a failure with nothing to
+            // say. Report the outermost message — the most concise statement of what
+            // went wrong — while the full cause chain stays in the log above.
+            bridge?.reportConnectionFailure(firstMessage)
 
             close()
             onDisconnect()
@@ -1222,6 +1230,13 @@ class SSH :
 
         // Unexpected disconnect - normal flow
         Timber.d("SSH connection lost outside grace period - disconnecting")
+
+        // sshlib notifies its monitors before connect() throws back to us, so this
+        // is the first thing to learn the connection died — and the teardown it is
+        // about to trigger has no reason to give. Report the cause here or the card
+        // ends up saying only "Connection failed".
+        bridge?.reportConnectionFailure(reason.message)
+
         onDisconnect()
     }
 

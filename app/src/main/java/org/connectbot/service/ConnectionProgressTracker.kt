@@ -123,14 +123,32 @@ class ConnectionProgressTracker(private val clock: () -> Long = System::currentT
         _progress.value = null
     }
 
-    /** Outcomes are sticky: the first one to land is the one the user is shown. */
+    /**
+     * Outcomes are sticky: the first to land is the one the user is shown.
+     *
+     * With one exception. A failure carrying no message can be replaced by one that
+     * can explain itself, because the order these arrive in is not the order of
+     * usefulness — teardown frequently reports first and has nothing to say, while
+     * the transport that actually knows the cause reports moments later. Without
+     * this the card would settle on a bare "Connection failed" whenever teardown
+     * won the race.
+     */
     private fun finish(outcome: ConnectionOutcome) {
         _progress.update { current ->
-            if (current == null || current.isFinished) {
-                current
-            } else {
-                current.copy(outcome = outcome, waitingOnUser = false)
+            val existing = current?.outcome
+            when {
+                current == null -> current
+
+                existing == null -> current.copy(outcome = outcome, waitingOnUser = false)
+
+                !existing.explainsItself() && outcome.explainsItself() ->
+                    current.copy(outcome = outcome, waitingOnUser = false)
+
+                else -> current
             }
         }
     }
 }
+
+/** False only for a failure with no message — the one outcome that says nothing. */
+private fun ConnectionOutcome.explainsItself(): Boolean = !(this is ConnectionOutcome.Failed && message.isNullOrBlank())
