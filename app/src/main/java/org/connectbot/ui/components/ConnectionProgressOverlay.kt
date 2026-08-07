@@ -23,9 +23,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.connectbot.R
@@ -65,6 +68,21 @@ private const val ELAPSED_VISIBLE_AFTER_MILLIS = 3_000L
 
 /** How long the all-ticks state is held before the overlay fades out. */
 private const val SUCCESS_DWELL_MILLIS = 300L
+
+/** Status symbol column. */
+private val SYMBOL_COLUMN_WIDTH = 24.dp
+
+/** Elapsed time column, wide enough for three digits of seconds. */
+private val TIMER_COLUMN_WIDTH = 44.dp
+
+/**
+ * Card width.
+ *
+ * The three columns are laid out against a known width rather than sized to their
+ * content, so the labels keep a common left edge and the timer a common right edge
+ * as stages change beneath them.
+ */
+private val CARD_WIDTH = 290.dp
 
 const val TAG_CONNECTION_PROGRESS_OVERLAY = "connection_progress_overlay"
 const val TAG_CONNECTION_PROGRESS_CANCEL = "connection_progress_cancel"
@@ -124,7 +142,9 @@ fun ConnectionProgressOverlay(
                 .testTag(TAG_CONNECTION_PROGRESS_OVERLAY),
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                modifier = Modifier
+                    .width(CARD_WIDTH)
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -181,44 +201,58 @@ private fun StageRow(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
     ) {
-        when {
-            hasFailed -> Icon(
-                imageVector = Icons.Default.ErrorOutline,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(16.dp),
-            )
+        // Column 1 — status symbol. Fixed width so the labels start on a common
+        // left edge whatever symbol each row happens to be showing.
+        Box(
+            modifier = Modifier.width(SYMBOL_COLUMN_WIDTH),
+            contentAlignment = Alignment.Center,
+        ) {
+            when {
+                hasFailed -> Icon(
+                    imageVector = Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(16.dp),
+                )
 
-            isDone -> Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = null,
-                tint = textColor,
-                modifier = Modifier.size(16.dp),
-            )
+                isDone -> Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = textColor,
+                    modifier = Modifier.size(16.dp),
+                )
 
-            isCurrent && snapshot.waitingOnUser -> Icon(
-                imageVector = Icons.Default.HourglassEmpty,
-                contentDescription = null,
-                tint = textColor,
-                modifier = Modifier.size(16.dp),
-            )
+                isCurrent && snapshot.waitingOnUser -> Icon(
+                    imageVector = Icons.Default.HourglassEmpty,
+                    contentDescription = null,
+                    tint = textColor,
+                    modifier = Modifier.size(16.dp),
+                )
 
-            isCurrent -> CircularProgressIndicator(
-                strokeWidth = 2.dp,
-                color = textColor,
-                modifier = Modifier.size(16.dp),
-            )
+                isCurrent -> CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    color = textColor,
+                    modifier = Modifier.size(16.dp),
+                )
 
-            else -> Spacer(modifier = Modifier.size(16.dp))
+                else -> Spacer(modifier = Modifier.size(16.dp))
+            }
         }
 
-        Spacer(modifier = Modifier.width(12.dp))
-
+        // Column 2 — label, left justified, taking whatever width is left over.
         Text(
             text = stageLabel(stage, snapshot, isCurrent),
             style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Start,
+            // "Authenticating (keyboard-interactive)" is the realistic worst case and
+            // needs two lines; anything longer is clipped rather than allowed to
+            // stretch the card.
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             // Stages not yet reached are dimmed rather than hidden, so the whole
             // shape of connecting is visible from the start.
             color = if (isDone || isCurrent) {
@@ -226,13 +260,24 @@ private fun StageRow(
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
             },
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
         )
 
-        if (isCurrent && !snapshot.isFinished) {
-            ElapsedLabel(
-                stageStartedAtMillis = snapshot.stageStartedAtMillis,
-                color = textColor,
-            )
+        // Column 3 — elapsed time. Always reserved, even before the counter appears
+        // and on rows that will never have one, so the labels beside it do not shift
+        // sideways the moment a stage starts running long.
+        Box(
+            modifier = Modifier.width(TIMER_COLUMN_WIDTH),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            if (isCurrent && !snapshot.isFinished) {
+                ElapsedLabel(
+                    stageStartedAtMillis = snapshot.stageStartedAtMillis,
+                    color = textColor,
+                )
+            }
         }
     }
 }
@@ -276,7 +321,8 @@ private fun ElapsedLabel(stageStartedAtMillis: Long, color: Color) {
         text = stringResource(R.string.connecting_elapsed_seconds, (elapsed / 1000).toInt()),
         style = MaterialTheme.typography.bodySmall,
         color = color.copy(alpha = 0.7f),
-        modifier = Modifier.padding(start = 8.dp),
+        textAlign = TextAlign.End,
+        maxLines = 1,
     )
 }
 
