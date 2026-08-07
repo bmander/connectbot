@@ -1,6 +1,6 @@
 /*
  * ConnectBot: simple, powerful, open-source SSH client for Android
- * Copyright 2025 Kenny Root
+ * Copyright 2025-2026 Kenny Root
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,6 +45,9 @@ import javax.inject.Inject
 
 enum class ConnectionState {
     UNKNOWN,
+
+    /** A bridge exists and its handshake is still in progress. */
+    CONNECTING,
     CONNECTED,
     DISCONNECTED,
 }
@@ -196,10 +199,14 @@ class HostListViewModel @Inject constructor(
         val bridge = manager.bridgesFlow.value.find { it.host.id == host.id }
         if (bridge != null) {
             // Bridge exists but may be disconnected or in grace period
-            return if (bridge.disconnected || bridge.isInGracePeriod()) {
-                ConnectionState.DISCONNECTED
-            } else {
-                ConnectionState.CONNECTED
+            return when {
+                bridge.disconnected || bridge.isInGracePeriod() -> ConnectionState.DISCONNECTED
+
+                // Checked before CONNECTED, which a mid-handshake bridge would
+                // otherwise fall into and show as ready when it is not.
+                bridge.isConnecting -> ConnectionState.CONNECTING
+
+                else -> ConnectionState.CONNECTED
             }
         }
 

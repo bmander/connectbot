@@ -137,6 +137,7 @@ import org.connectbot.terminal.Terminal
 import org.connectbot.ui.LoadingScreen
 import org.connectbot.ui.LocalTerminalManager
 import org.connectbot.ui.components.AuthBannerDialog
+import org.connectbot.ui.components.ConnectionProgressOverlay
 import org.connectbot.ui.components.FloatingTextInputDialog
 import org.connectbot.ui.components.InlinePrompt
 import org.connectbot.ui.components.ResizeDialog
@@ -360,6 +361,7 @@ private fun ConsoleTerminalPage(
     onPasteRequest: () -> Unit,
     onInterceptKey: (KeyEvent) -> Boolean,
     onReconnect: () -> Unit,
+    onCancelConnection: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
     terminalModifier: Modifier = Modifier,
@@ -456,6 +458,17 @@ private fun ConsoleTerminalPage(
                     termFocusRequester.requestFocus()
                 },
                 modifier = Modifier.align(Alignment.BottomCenter),
+            )
+
+            // Sits above the terminal, which keeps streaming its own connect log
+            // underneath. Yields entirely while a prompt is up so InlinePrompt owns
+            // the screen; the stage list comes back once the prompt is answered.
+            val connectionProgress by bridge.connectionProgress.collectAsState()
+
+            ConnectionProgressOverlay(
+                progress = connectionProgress.takeIf { promptState == null },
+                onCancel = onCancelConnection,
+                modifier = Modifier.align(Alignment.Center),
             )
 
             AnimatedVisibility(
@@ -965,6 +978,7 @@ fun ConsoleScreen(
                                 onPasteRequest = ::pasteClipboardContents,
                                 onInterceptKey = handleShortcut,
                                 onReconnect = { viewModel.reconnect(bridge) },
+                                onCancelConnection = { viewModel.cancelConnection(bridge) },
                                 snackbarHostState = snackbarHostState,
                                 modifier = Modifier.fillMaxSize(),
                                 terminalModifier = terminalModifier,

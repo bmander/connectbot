@@ -355,6 +355,29 @@
 	<!-- Summary for the camera shortcut usage preference -->
 	<string name="pref_keepalive_summary">"Prevent the screen from turning off when working in a console"</string>
 
+	<!-- Heading on the overlay shown while a connection is being established -->
+	<string name="connecting_overlay_title">"Connecting…"</string>
+	<!-- Connection step: looking up the hostname -->
+	<string name="connecting_stage_resolving">"Looking up host"</string>
+	<!-- Connection step: opening the connection and agreeing encryption -->
+	<string name="connecting_stage_handshaking">"Contacting server"</string>
+	<!-- Connection step: checking the server is the one we expect -->
+	<string name="connecting_stage_verifying_host_key">"Checking host key"</string>
+	<!-- Connection step: proving who we are -->
+	<string name="connecting_stage_authenticating">"Authenticating"</string>
+	<!-- Connection step: starting the shell -->
+	<string name="connecting_stage_opening_session">"Opening shell"</string>
+	<!-- Shown beside the current step once it has been running a while, %1$d is seconds -->
+	<string name="connecting_elapsed_seconds">"%1$ds"</string>
+	<!-- Shown when a step is waiting for the user to answer a prompt -->
+	<string name="connecting_waiting_for_you">"Waiting for you"</string>
+	<!-- Shown when a step ran out of time, %1$d is the number of seconds allowed -->
+	<string name="connecting_timed_out">"Timed out after %1$ds"</string>
+	<!-- Shown when the user cancelled the attempt -->
+	<string name="connecting_cancelled">"Cancelled"</string>
+	<!-- Shown when connecting failed for an unspecified reason -->
+	<string name="connecting_failed">"Connection failed"</string>
+
 	<!-- Name for the connection timeout preference -->
 	<string name="pref_connect_timeout_title">"Connection timeout"</string>
 	<!-- Summary for the connection timeout preference -->
@@ -919,6 +942,7 @@
 	<!-- Accessibility text for connection state in list of hosts when the host is currently
 	 connected. -->
 	<string name="image_description_connected">"Connected."</string>
+	<string name="image_description_connecting">"Connecting."</string>
 
 	<!-- Accessibility text for connection state in list of hosts when the host is currently
 	     disconnected after having been previously connected. -->

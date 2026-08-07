@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.connectbot.di.CoroutineDispatchers
+import org.connectbot.service.ConnectionOutcome
 import org.connectbot.service.TerminalBridge
 import org.connectbot.service.TerminalManager
 import org.connectbot.terminal.ProgressState
@@ -309,6 +310,14 @@ class ConsoleViewModel @Inject constructor(
      */
     fun reconnect(bridge: TerminalBridge) {
         terminalManager?.requestReconnect(bridge)
+        _uiState.update { it.copy(revision = it.revision + 1) }
+    }
+
+    /**
+     * Abandon an in-flight connection attempt.
+     */
+    fun cancelConnection(bridge: TerminalBridge) {
+        bridge.abandonConnection(ConnectionOutcome.Cancelled)
         _uiState.update { it.copy(revision = it.revision + 1) }
     }
 }
