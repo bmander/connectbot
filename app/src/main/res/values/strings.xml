@@ -355,6 +355,15 @@
 	<!-- Summary for the camera shortcut usage preference -->
 	<string name="pref_keepalive_summary">"Prevent the screen from turning off when working in a console"</string>
 
+	<!-- Name for the connection timeout preference -->
+	<string name="pref_connect_timeout_title">"Connection timeout"</string>
+	<!-- Summary for the connection timeout preference -->
+	<string name="pref_connect_timeout_summary">"How long to wait at each step of connecting before giving up"</string>
+	<!-- Connection timeout choice: no limit -->
+	<string name="pref_connect_timeout_never">"Never time out"</string>
+	<!-- Connection timeout choice, %1$d is a number of seconds -->
+	<string name="pref_connect_timeout_seconds">"%1$d seconds"</string>
+
 	<!-- Name for the Wi-Fi lock preference -->
 	<string name="pref_wifilock_title">"Keep Wi-Fi active"</string>
 	<!-- Summary for the Wi-Fi lock preference -->

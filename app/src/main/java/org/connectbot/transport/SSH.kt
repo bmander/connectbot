@@ -50,6 +50,7 @@ import org.connectbot.data.entity.KeyStorageType
 import org.connectbot.data.entity.PortForward
 import org.connectbot.data.entity.Pubkey
 import org.connectbot.service.ConnectionStage
+import org.connectbot.service.ConnectionTimeouts
 import org.connectbot.service.DisconnectReason
 import org.connectbot.service.TerminalBridge
 import org.connectbot.service.TerminalManager
@@ -773,10 +774,11 @@ class SSH :
             }
 
             // Connect to jump host
+            val jumpTimeout = handshakeTimeoutMillis()
             jc.connect(
                 HostKeyVerifier(jumpHost),
-                CONNECT_TIMEOUT_MS,
-                KEX_TIMEOUT_MS,
+                jumpTimeout,
+                jumpTimeout,
                 parseIpVersion(jumpHost.ipVersion, jumpHost.hostname),
             )
 
@@ -943,6 +945,19 @@ class SSH :
         InetAddress.getAllByName(hostname)
     }
 
+    /**
+     * Milliseconds sshlib may spend on the TCP connect and on key exchange.
+     *
+     * Zero is sshlib's "wait forever", which is exactly what the user's "Never time
+     * out" choice means, so the mapping from an absent budget is direct. Without
+     * this, sshlib's default is that same unbounded wait, which is what let a
+     * blackholed host hang behind a single "Connecting to..." line.
+     */
+    private fun handshakeTimeoutMillis(): Int {
+        val timeouts = manager?.getConnectionTimeouts() ?: ConnectionTimeouts.DEFAULT
+        return timeouts.handshake?.toInt() ?: 0
+    }
+
     override fun connect() {
         val currentHost = host ?: return
 
@@ -985,10 +1000,11 @@ class SSH :
             bridge?.reportConnectionStage(ConnectionStage.HANDSHAKING)
             handshakeInFlight = true
             val connectionInfo = try {
+                val timeout = handshakeTimeoutMillis()
                 connection?.connect(
                     HostKeyVerifier(),
-                    CONNECT_TIMEOUT_MS,
-                    KEX_TIMEOUT_MS,
+                    timeout,
+                    timeout,
                     parseIpVersion(currentHost.ipVersion, currentHost.hostname),
                 ) ?: throw IOException("Connection failed")
             } finally {
@@ -1556,22 +1572,6 @@ class SSH :
         private const val AUTH_KEYBOARDINTERACTIVE = "keyboard-interactive"
 
         private const val AUTH_TRIES = 20
-
-        /**
-         * Bound the TCP connect and key exchange phases.
-         *
-         * sshlib's `connect(verifier, ipVersion)` overload delegates to
-         * `connect(verifier, 0, 0, ipVersion)`, and zero means *wait forever* — a
-         * blackholed host would hang behind a single "Connecting to..." line with no
-         * way out. These are deliberately generous (a real handshake is well under a
-         * second even on a slow mobile link); the point is to bound infinity, not to
-         * fail fast.
-         *
-         * Note these do *not* cover name resolution: sshlib resolves the hostname
-         * itself with no timeout parameter, so DNS is bounded separately.
-         */
-        private const val CONNECT_TIMEOUT_MS = 30_000
-        private const val KEX_TIMEOUT_MS = 30_000
 
         private val hostmask = Pattern.compile(
             "^(.+)@((?:[0-9a-z._-]+)|(?:\\[[a-f:0-9]+(?:%[-_.a-z0-9]+)?\\]))(?::(\\d+))?\$",

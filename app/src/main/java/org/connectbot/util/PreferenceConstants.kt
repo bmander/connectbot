@@ -56,6 +56,14 @@ object PreferenceConstants {
 
     const val KEEP_ALIVE: String = "keepalive"
 
+    /**
+     * How long any one phase of connecting may take, in seconds, as a string.
+     * "0" means no limit, which restores the unbounded behaviour that predates
+     * connection timeouts.
+     */
+    const val CONNECT_TIMEOUT: String = "connectTimeout"
+    const val DEFAULT_CONNECT_TIMEOUT: String = "30"
+
     const val WIFI_LOCK: String = "wifilock"
 
     const val BUMPY_ARROWS: String = "bumpyarrows"

@@ -25,6 +25,7 @@ import de.mud.telnet.TelnetProtocolHandler
 import org.connectbot.R
 import org.connectbot.data.entity.Host
 import org.connectbot.service.ConnectionStage
+import org.connectbot.service.ConnectionTimeouts
 import org.connectbot.service.DisconnectReason
 import org.connectbot.service.TerminalBridge
 import org.connectbot.service.TerminalManager
@@ -127,7 +128,16 @@ class Telnet : AbsTransport {
                     currentHost.protocol,
                 ),
             )
-            tryAllAddresses(socket!!, currentHost.hostname, currentHost.port, currentHost.ipVersion) { stage ->
+            // Zero is the JDK's "wait forever", which is what the user's "Never time
+            // out" choice means, so an absent budget maps across directly.
+            val timeouts = manager?.getConnectionTimeouts() ?: ConnectionTimeouts.DEFAULT
+            tryAllAddresses(
+                socket!!,
+                currentHost.hostname,
+                currentHost.port,
+                currentHost.ipVersion,
+                timeouts.handshake?.toInt() ?: 0,
+            ) { stage ->
                 bridge?.reportConnectionStage(stage)
             }
 
@@ -270,9 +280,6 @@ class Telnet : AbsTransport {
         private const val PROTOCOL = "telnet"
         private const val DEFAULT_PORT = 23
 
-        /** Bound the TCP connect so a blackholed host fails instead of hanging. */
-        private const val CONNECT_TIMEOUT_MS = 30_000
-
         private val hostmask: Pattern = Pattern.compile(
             "^((?:[0-9a-z._-]+)|(?:\\[[a-f:0-9]+(?:%[-_.a-z0-9]+)?\\]))(?::(\\d+))?\$",
             Pattern.CASE_INSENSITIVE,
@@ -287,6 +294,7 @@ class Telnet : AbsTransport {
             host: String,
             port: Int,
             ipVersion: String,
+            connectTimeoutMillis: Int = 0,
             onStage: (ConnectionStage) -> Unit = {},
         ) {
             onStage(ConnectionStage.RESOLVING)
@@ -307,7 +315,7 @@ class Telnet : AbsTransport {
                     // Without an explicit timeout this blocks until the OS gives up,
                     // which makes the catch below (and the throw after the loop) dead
                     // code for a blackholed host.
-                    sock.connect(InetSocketAddress(addr, port), CONNECT_TIMEOUT_MS)
+                    sock.connect(InetSocketAddress(addr, port), connectTimeoutMillis)
                     return
                 } catch (ignored: SocketTimeoutException) {
                 }

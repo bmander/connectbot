@@ -173,6 +173,7 @@ fun SettingsScreen(
         onWifilockChange = viewModel::updateWifilock,
         onBackupkeysChange = viewModel::updateBackupkeys,
         onScrollbackChange = viewModel::updateScrollback,
+        onConnectTimeoutChange = viewModel::updateConnectTimeout,
         onAddCustomTerminalType = viewModel::addCustomTerminalType,
         onRemoveCustomTerminalType = viewModel::removeCustomTerminalType,
         onFontFamilyChange = viewModel::updateFontFamily,
@@ -218,6 +219,7 @@ fun SettingsScreenContent(
     onWifilockChange: (Boolean) -> Unit,
     onBackupkeysChange: (Boolean) -> Unit,
     onScrollbackChange: (String) -> Unit,
+    onConnectTimeoutChange: (String) -> Unit,
     onAddCustomTerminalType: (String) -> Unit,
     onRemoveCustomTerminalType: (String) -> Unit,
     onFontFamilyChange: (String) -> Unit,
@@ -555,6 +557,25 @@ fun SettingsScreenContent(
                     summary = stringResource(R.string.pref_keepalive_summary),
                     checked = uiState.keepalive,
                     onCheckedChange = onKeepAliveChange,
+                )
+            }
+
+            item {
+                val neverLabel = stringResource(R.string.pref_connect_timeout_never)
+                val timeoutEntries = listOf(
+                    stringResource(R.string.pref_connect_timeout_seconds, 15) to "15",
+                    stringResource(R.string.pref_connect_timeout_seconds, 30) to "30",
+                    stringResource(R.string.pref_connect_timeout_seconds, 60) to "60",
+                    stringResource(R.string.pref_connect_timeout_seconds, 120) to "120",
+                    neverLabel to "0",
+                )
+                ListPreference(
+                    title = stringResource(R.string.pref_connect_timeout_title),
+                    summary = timeoutEntries.find { it.second == uiState.connectTimeout }?.first
+                        ?: stringResource(R.string.pref_connect_timeout_summary),
+                    value = uiState.connectTimeout,
+                    entries = timeoutEntries,
+                    onValueChange = onConnectTimeoutChange,
                 )
             }
 
@@ -1583,6 +1604,7 @@ private fun SettingsScreenPreview() {
             onWifilockChange = {},
             onBackupkeysChange = {},
             onScrollbackChange = {},
+            onConnectTimeoutChange = {},
             onAddCustomTerminalType = {},
             onRemoveCustomTerminalType = {},
             onFontFamilyChange = {},

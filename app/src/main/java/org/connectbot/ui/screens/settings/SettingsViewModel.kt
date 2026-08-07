@@ -58,6 +58,7 @@ data class SettingsUiState(
     val wifilock: Boolean = true,
     val backupkeys: Boolean = false,
     val scrollback: String = "140",
+    val connectTimeout: String = PreferenceConstants.DEFAULT_CONNECT_TIMEOUT,
     val rotation: String = "Default",
     val titlebarhide: Boolean = false,
     val fullscreen: Boolean = false,
@@ -196,6 +197,10 @@ class SettingsViewModel @Inject constructor(
             wifilock = prefs.getBoolean("wifilock", true),
             backupkeys = prefs.getBoolean("backupkeys", false),
             scrollback = prefs.getString("scrollback", "140") ?: "140",
+            connectTimeout = prefs.getString(
+                PreferenceConstants.CONNECT_TIMEOUT,
+                PreferenceConstants.DEFAULT_CONNECT_TIMEOUT,
+            ) ?: PreferenceConstants.DEFAULT_CONNECT_TIMEOUT,
             rotation = prefs.getString("rotation", "Default") ?: "Default",
             titlebarhide = prefs.getBoolean("titlebarhide", false),
             fullscreen = prefs.getBoolean("fullscreen", false),
@@ -343,6 +348,10 @@ class SettingsViewModel @Inject constructor(
 
     fun updateScrollback(value: String) {
         updateStringPref(PreferenceConstants.SCROLLBACK, value) { copy(scrollback = value) }
+    }
+
+    fun updateConnectTimeout(value: String) {
+        updateStringPref(PreferenceConstants.CONNECT_TIMEOUT, value) { copy(connectTimeout = value) }
     }
 
     fun updateStickyModifiers(value: String) {

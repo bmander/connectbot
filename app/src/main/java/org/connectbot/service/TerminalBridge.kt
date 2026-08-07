@@ -534,6 +534,17 @@ class TerminalBridge {
         connectAbandoned = false
         connectionTracker.begin()
 
+        // Bound each phase. sshlib's own connect and kex timeouts are the only thing
+        // that can kill an orphaned socket, but they cover neither DNS nor anything
+        // after the handshake, which is what this covers.
+        watchdogJob?.cancel()
+        watchdogJob = scope.launch {
+            watchConnection(connectionProgress, manager.getConnectionTimeouts()) { stage, budget ->
+                Timber.w("Connection to ${host.nickname} timed out during $stage after ${budget}ms")
+                abandonConnection(ConnectionOutcome.TimedOut(stage, budget))
+            }
+        }
+
         transport = newTransport
         newTransport.bridge = this
         newTransport.manager = manager
@@ -760,6 +771,42 @@ class TerminalBridge {
         if (disconnectListener != null) {
             disconnectListeners.add(disconnectListener)
         }
+    }
+
+    /**
+     * Give up on the in-flight connection attempt.
+     *
+     * Shared by the user pressing Cancel and by the stage watchdog firing. Order
+     * matters: the outcome is recorded before any teardown, so the overlay can say
+     * what happened rather than racing the disconnect path for the explanation.
+     *
+     * Cancelling [connectJob] only takes effect at a suspension point, and a
+     * blocking socket call is not one, so this cannot promise the underlying
+     * handshake stops immediately — that is what the transport timeouts bound. What
+     * it does promise is that the attempt is disowned right now: the user gets their
+     * screen back and nothing the abandoned attempt later produces is adopted.
+     */
+    fun abandonConnection(outcome: ConnectionOutcome) {
+        if (!connecting) return
+
+        connectAbandoned = true
+        when (outcome) {
+            is ConnectionOutcome.TimedOut -> connectionTracker.timeOut(outcome.stage, outcome.budgetMillis)
+            else -> connectionTracker.cancel()
+        }
+
+        watchdogJob?.cancel()
+        // Unblocks any prompt the attempt is parked on. The cancellation path there
+        // already returns null, and callers already treat a null answer as declined.
+        promptManager.cancelPrompt()
+        connectJob?.cancel()
+
+        val reason = if (outcome is ConnectionOutcome.Cancelled) {
+            DisconnectReason.USER_REQUESTED
+        } else {
+            DisconnectReason.IO_ERROR
+        }
+        dispatchDisconnect(reason)
     }
 
     /**
