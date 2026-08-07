@@ -72,15 +72,12 @@ private const val SUCCESS_DWELL_MILLIS = 300L
 /** Status symbol column. */
 private val SYMBOL_COLUMN_WIDTH = 24.dp
 
-/** Elapsed time column, wide enough for three digits of seconds. */
-private val TIMER_COLUMN_WIDTH = 44.dp
-
 /**
  * Card width.
  *
- * The three columns are laid out against a known width rather than sized to their
- * content, so the labels keep a common left edge and the timer a common right edge
- * as stages change beneath them.
+ * Fixed rather than sized to content, so the card does not resize under the user on
+ * every stage transition as label lengths change — and in particular does not grow
+ * sideways the moment a stage runs long enough to earn an elapsed counter.
  */
 private val CARD_WIDTH = 290.dp
 
@@ -243,7 +240,9 @@ private fun StageRow(
             }
         }
 
-        // Column 2 — label, left justified, taking whatever width is left over.
+        // Column 2 — label, left justified, taking whatever width is left over. The
+        // elapsed counter rides along on the end of this text rather than occupying
+        // a column of its own.
         Text(
             text = stageLabel(stage, snapshot, isCurrent),
             style = MaterialTheme.typography.bodyMedium,
@@ -262,23 +261,8 @@ private fun StageRow(
             },
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 12.dp),
+                .padding(start = 12.dp),
         )
-
-        // Column 3 — elapsed time. Always reserved, even before the counter appears
-        // and on rows that will never have one, so the labels beside it do not shift
-        // sideways the moment a stage starts running long.
-        Box(
-            modifier = Modifier.width(TIMER_COLUMN_WIDTH),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
-            if (isCurrent && !snapshot.isFinished) {
-                ElapsedLabel(
-                    stageStartedAtMillis = snapshot.stageStartedAtMillis,
-                    color = textColor,
-                )
-            }
-        }
     }
 }
 
@@ -290,21 +274,28 @@ private fun stageLabel(
 ): String {
     val base = stringResource(stage.labelRes())
     if (!isCurrent) return base
-    if (snapshot.waitingOnUser) {
-        return "$base — ${stringResource(R.string.connecting_waiting_for_you)}"
+
+    val qualified = when {
+        snapshot.waitingOnUser -> "$base — ${stringResource(R.string.connecting_waiting_for_you)}"
+        snapshot.detail != null -> "$base (${snapshot.detail})"
+        else -> base
     }
-    return snapshot.detail?.let { "$base ($it)" } ?: base
+
+    if (snapshot.isFinished) return qualified
+    val elapsed = elapsedLabel(snapshot.stageStartedAtMillis) ?: return qualified
+    return "$qualified · $elapsed"
 }
 
 /**
- * A seconds counter for the running stage.
+ * A seconds counter for the running stage, or null until it has been going long
+ * enough to be worth mentioning.
  *
  * This is the part that actually answers "is it stuck?", and is why the progress
  * snapshot carries a start timestamp rather than a precomputed duration: the clock
  * lives here and stops existing when the overlay does.
  */
 @Composable
-private fun ElapsedLabel(stageStartedAtMillis: Long, color: Color) {
+private fun elapsedLabel(stageStartedAtMillis: Long): String? {
     var now by remember(stageStartedAtMillis) { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(stageStartedAtMillis) {
@@ -315,15 +306,9 @@ private fun ElapsedLabel(stageStartedAtMillis: Long, color: Color) {
     }
 
     val elapsed = now - stageStartedAtMillis
-    if (elapsed < ELAPSED_VISIBLE_AFTER_MILLIS) return
+    if (elapsed < ELAPSED_VISIBLE_AFTER_MILLIS) return null
 
-    Text(
-        text = stringResource(R.string.connecting_elapsed_seconds, (elapsed / 1000).toInt()),
-        style = MaterialTheme.typography.bodySmall,
-        color = color.copy(alpha = 0.7f),
-        textAlign = TextAlign.End,
-        maxLines = 1,
-    )
+    return stringResource(R.string.connecting_elapsed_seconds, (elapsed / 1000).toInt())
 }
 
 @Composable
