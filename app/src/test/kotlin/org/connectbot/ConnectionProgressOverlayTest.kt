@@ -122,22 +122,24 @@ class ConnectionProgressOverlayTest {
             .assertIsDisplayed()
     }
 
-    // The detail belongs to the running stage only. Showing it under a stage that
-    // has already finished would misreport what is happening now.
+    // On a failure the last detail reported is what was being attempted when it
+    // broke, so it has to survive the attempt finishing — that line beside the
+    // failure reason is the whole diagnosis.
 
     @Test
-    fun detailNotShownOnceAttemptFinished() {
+    fun detailSurvivesFailureAlongsideTheReason() {
         setOverlay(
             progress(
-                ConnectionStage.AUTHENTICATING,
-                detail = "Attempting 'publickey' authentication",
+                ConnectionStage.HANDSHAKING,
+                detail = "Contacting 100.87.22.3 port 22",
                 outcome = timedOut(),
             ),
         )
 
-        composeTestRule
-            .onNodeWithText("Attempting 'publickey' authentication")
-            .assertDoesNotExist()
+        composeTestRule.onNodeWithText("Contacting 100.87.22.3 port 22").assertIsDisplayed()
+        composeTestRule.onNodeWithText(
+            composeTestRule.activity.getString(R.string.connecting_timed_out, 30),
+        ).assertIsDisplayed()
     }
 
     @Test

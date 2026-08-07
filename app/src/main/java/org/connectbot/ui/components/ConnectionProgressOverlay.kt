@@ -247,7 +247,12 @@ private fun StageRow(
         // growing and shrinking beneath the user. It is capped at one line for the
         // same reason; this is a live readout, and the terminal log underneath keeps
         // the full text.
-        if (isCurrent && !snapshot.isFinished) {
+        //
+        // It survives the attempt finishing on purpose: on a failure the last thing
+        // reported is what was being attempted when it broke — "Contacting
+        // 100.87.22.3 port 22" beside "Timed out after 30s" is the whole diagnosis,
+        // and dropping it at exactly that moment would throw the answer away.
+        if (isCurrent) {
             Text(
                 text = snapshot.detail.orEmpty(),
                 style = MaterialTheme.typography.bodySmall,

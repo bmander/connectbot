@@ -927,17 +927,32 @@ class SSH :
      * after the connect and kex timeouts were added. Probing here gives the watchdog
      * something to time out and lets a bad hostname be reported as such.
      *
-     * The result is deliberately discarded: sshlib is still handed the hostname, not
-     * an address, because resolving to a literal would break host key matching (the
-     * verifier derives its match name from whatever it is given) and would forfeit
-     * sshlib's dual-stack Happy Eyeballs racing. The repeat lookup is served from the
-     * platform DNS cache.
+     * The addresses are reported but not used for connecting: sshlib is still handed
+     * the hostname, not an address, because resolving to a literal would break host
+     * key matching (the verifier derives its match name from whatever it is given)
+     * and would forfeit sshlib's dual-stack Happy Eyeballs racing. The repeat lookup
+     * is served from the platform DNS cache.
+     *
+     * @return the addresses found, or empty when [hostname] is already a literal.
      */
-    private fun preflightResolve(hostname: String) {
-        if (HostConstants.isIpAddress(hostname)) return
+    private fun preflightResolve(hostname: String): List<InetAddress> {
+        if (HostConstants.isIpAddress(hostname)) return emptyList()
 
         bridge?.reportConnectionStage(ConnectionStage.RESOLVING)
-        InetAddress.getAllByName(hostname)
+        val addresses = InetAddress.getAllByName(hostname).toList()
+
+        // Worth saying out loud. Which address a name resolved to is the difference
+        // between "wrong host" and "right host, no route" — and on a split-DNS setup
+        // such as a VPN it is the only way to see whether the tunnel's resolver
+        // answered at all.
+        bridge?.outputLine(
+            manager?.res?.getString(
+                R.string.terminal_resolved,
+                hostname,
+                addresses.joinToString(", ") { it.hostAddress ?: it.toString() },
+            ),
+        )
+        return addresses
     }
 
     /**
@@ -974,7 +989,7 @@ class SSH :
             }
         }
 
-        preflightResolve(currentHost.hostname)
+        val resolved = preflightResolve(currentHost.hostname)
 
         connection = Connection(currentHost.hostname, currentHost.port)
         connection?.addConnectionMonitor(this)
@@ -993,6 +1008,18 @@ class SSH :
 
         try {
             bridge?.reportConnectionStage(ConnectionStage.HANDSHAKING)
+            // Entering the stage drops the previous detail and nothing else is
+            // logged until connect() returns, so without this the card would show a
+            // blank line for the whole handshake — which is exactly the stretch a
+            // stalled connection sits in.
+            bridge?.outputLine(
+                manager?.res?.getString(
+                    R.string.terminal_contacting,
+                    resolved.joinToString(", ") { it.hostAddress ?: it.toString() }
+                        .ifEmpty { currentHost.hostname },
+                    currentHost.port,
+                ),
+            )
             handshakeInFlight = true
             val connectionInfo = try {
                 val timeout = handshakeTimeoutMillis()
