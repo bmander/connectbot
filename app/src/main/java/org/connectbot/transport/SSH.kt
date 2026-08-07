@@ -1078,11 +1078,15 @@ class SSH :
 
             // Display the reason in the text.
             var t: Throwable? = e
-            var firstMessage: String? = null
+            var rootMessage: String? = null
             while (t != null) {
                 val message = t.message
                 if (message != null) {
-                    if (firstMessage == null) firstMessage = message
+                    // Keep overwriting, so this ends up holding the deepest message
+                    // in the chain. sshlib's outer wrappers say only "There was a
+                    // problem while connecting"; the useful text — connection
+                    // refused, no route to host — is at the bottom.
+                    rootMessage = message
                     bridge?.outputLine(message)
                     if (t is NoRouteToHostException) {
                         bridge?.outputLine(manager?.res?.getString(R.string.terminal_no_route))
@@ -1091,11 +1095,10 @@ class SSH :
                 t = t.cause
             }
 
-            // This catch does not rethrow, so the bridge's own handler never sees the
-            // exception and teardown would otherwise record a failure with nothing to
-            // say. Report the outermost message — the most concise statement of what
-            // went wrong — while the full cause chain stays in the log above.
-            bridge?.reportConnectionFailure(firstMessage)
+            // This catch does not rethrow, so the bridge's own handler never sees
+            // the exception and teardown would otherwise record a failure with
+            // nothing to say. The full chain stays in the log above.
+            bridge?.reportConnectionFailure(rootMessage)
 
             close()
             onDisconnect()
@@ -1231,11 +1234,15 @@ class SSH :
         // Unexpected disconnect - normal flow
         Timber.d("SSH connection lost outside grace period - disconnecting")
 
-        // sshlib notifies its monitors before connect() throws back to us, so this
-        // is the first thing to learn the connection died — and the teardown it is
-        // about to trigger has no reason to give. Report the cause here or the card
-        // ends up saying only "Connection failed".
-        bridge?.reportConnectionFailure(reason.message)
+        // sshlib notifies its monitors before connect() throws back to us, and the
+        // reason it hands over mid-handshake is a generic wrapper — "There was a
+        // problem during connect." Reporting that would win the race against the
+        // catch block in connect(), which has the actual cause, so during a
+        // handshake stay quiet and let it speak. Outside one this is the only
+        // reporter there is.
+        if (!handshakeInFlight) {
+            bridge?.reportConnectionFailure(reason.message)
+        }
 
         onDisconnect()
     }

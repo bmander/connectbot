@@ -171,6 +171,12 @@ fun ConnectionProgressOverlay(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center,
+                        // Root-cause messages from the platform can be long — the
+                        // errno text repeats both endpoints and the elapsed time.
+                        // Bounded here so the card cannot grow off-screen; the log
+                        // underneath still carries the whole chain.
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }
