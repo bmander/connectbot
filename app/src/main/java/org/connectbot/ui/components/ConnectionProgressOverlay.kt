@@ -22,8 +22,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,6 +37,7 @@ import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,7 +49,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -60,7 +59,6 @@ import org.connectbot.R
 import org.connectbot.service.ConnectionOutcome
 import org.connectbot.service.ConnectionProgress
 import org.connectbot.service.ConnectionStage
-import org.connectbot.ui.theme.terminal
 
 /** Wait this long before showing an elapsed counter, so quick connects stay quiet. */
 private const val ELAPSED_VISIBLE_AFTER_MILLIS = 3_000L
@@ -107,53 +105,62 @@ fun ConnectionProgressOverlay(
         modifier = modifier,
     ) {
         val snapshot = progress ?: return@AnimatedVisibility
-        val terminalColors = MaterialTheme.colorScheme.terminal
 
-        Column(
+        // A framed, opaque card rather than the translucent scrim the reconnect
+        // overlay uses. That one sits flush against the bottom edge, but this floats
+        // over the middle of live terminal output, where a half-transparent panel
+        // leaves the text underneath competing with the stage list. An outlined
+        // surface reads as a distinct object no matter what colour scheme the
+        // terminal is running.
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            shadowElevation = 8.dp,
+            tonalElevation = 3.dp,
             modifier = Modifier
                 .padding(24.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(terminalColors.overlayBackground)
-                .padding(20.dp)
                 .testTag(TAG_CONNECTION_PROGRESS_OVERLAY),
-            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = stringResource(R.string.connecting_overlay_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = terminalColors.overlayText,
-                modifier = Modifier.padding(bottom = 16.dp),
-            )
-
-            ConnectionStage.entries.forEach { stage ->
-                StageRow(
-                    stage = stage,
-                    snapshot = snapshot,
-                    textColor = terminalColors.overlayText,
-                )
-            }
-
-            snapshot.outcome?.failureText()?.let { text ->
+            Column(
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 12.dp),
+                    text = stringResource(R.string.connecting_overlay_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(bottom = 16.dp),
                 )
-            }
 
-            if (!snapshot.isFinished) {
-                TextButton(
-                    onClick = onCancel,
-                    modifier = Modifier
-                        .padding(top = 12.dp)
-                        .testTag(TAG_CONNECTION_PROGRESS_CANCEL),
-                ) {
-                    Text(
-                        text = stringResource(R.string.delete_neg),
-                        color = terminalColors.overlayText,
+                ConnectionStage.entries.forEach { stage ->
+                    StageRow(
+                        stage = stage,
+                        snapshot = snapshot,
+                        textColor = MaterialTheme.colorScheme.onSurface,
                     )
+                }
+
+                snapshot.outcome?.failureText()?.let { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+
+                if (!snapshot.isFinished) {
+                    TextButton(
+                        onClick = onCancel,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .testTag(TAG_CONNECTION_PROGRESS_CANCEL),
+                    ) {
+                        Text(text = stringResource(R.string.delete_neg))
+                    }
                 }
             }
         }
@@ -214,7 +221,11 @@ private fun StageRow(
             style = MaterialTheme.typography.bodyMedium,
             // Stages not yet reached are dimmed rather than hidden, so the whole
             // shape of connecting is visible from the start.
-            color = if (isDone || isCurrent) textColor else textColor.copy(alpha = 0.4f),
+            color = if (isDone || isCurrent) {
+                textColor
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            },
         )
 
         if (isCurrent && !snapshot.isFinished) {
