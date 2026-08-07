@@ -258,6 +258,9 @@ class Telnet : AbsTransport {
         private const val PROTOCOL = "telnet"
         private const val DEFAULT_PORT = 23
 
+        /** Bound the TCP connect so a blackholed host fails instead of hanging. */
+        private const val CONNECT_TIMEOUT_MS = 30_000
+
         private val hostmask: Pattern = Pattern.compile(
             "^((?:[0-9a-z._-]+)|(?:\\[[a-f:0-9]+(?:%[-_.a-z0-9]+)?\\]))(?::(\\d+))?\$",
             Pattern.CASE_INSENSITIVE,
@@ -281,7 +284,10 @@ class Telnet : AbsTransport {
             }
             for (addr in addresses) {
                 try {
-                    sock.connect(InetSocketAddress(addr, port))
+                    // Without an explicit timeout this blocks until the OS gives up,
+                    // which makes the catch below (and the throw after the loop) dead
+                    // code for a blackholed host.
+                    sock.connect(InetSocketAddress(addr, port), CONNECT_TIMEOUT_MS)
                     return
                 } catch (ignored: SocketTimeoutException) {
                 }

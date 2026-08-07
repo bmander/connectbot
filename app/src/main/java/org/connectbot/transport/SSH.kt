@@ -750,7 +750,12 @@ class SSH :
             }
 
             // Connect to jump host
-            jc.connect(HostKeyVerifier(jumpHost), parseIpVersion(jumpHost.ipVersion, jumpHost.hostname))
+            jc.connect(
+                HostKeyVerifier(jumpHost),
+                CONNECT_TIMEOUT_MS,
+                KEX_TIMEOUT_MS,
+                parseIpVersion(jumpHost.ipVersion, jumpHost.hostname),
+            )
 
             // Track this connection for cleanup
             jumpConnections.add(jc)
@@ -933,6 +938,8 @@ class SSH :
         try {
             val connectionInfo = connection?.connect(
                 HostKeyVerifier(),
+                CONNECT_TIMEOUT_MS,
+                KEX_TIMEOUT_MS,
                 parseIpVersion(currentHost.ipVersion, currentHost.hostname),
             ) ?: throw IOException("Connection failed")
             connected = true
@@ -1477,6 +1484,22 @@ class SSH :
         private const val AUTH_KEYBOARDINTERACTIVE = "keyboard-interactive"
 
         private const val AUTH_TRIES = 20
+
+        /**
+         * Bound the TCP connect and key exchange phases.
+         *
+         * sshlib's `connect(verifier, ipVersion)` overload delegates to
+         * `connect(verifier, 0, 0, ipVersion)`, and zero means *wait forever* — a
+         * blackholed host would hang behind a single "Connecting to..." line with no
+         * way out. These are deliberately generous (a real handshake is well under a
+         * second even on a slow mobile link); the point is to bound infinity, not to
+         * fail fast.
+         *
+         * Note these do *not* cover name resolution: sshlib resolves the hostname
+         * itself with no timeout parameter, so DNS is bounded separately.
+         */
+        private const val CONNECT_TIMEOUT_MS = 30_000
+        private const val KEX_TIMEOUT_MS = 30_000
 
         private val hostmask = Pattern.compile(
             "^(.+)@((?:[0-9a-z._-]+)|(?:\\[[a-f:0-9]+(?:%[-_.a-z0-9]+)?\\]))(?::(\\d+))?\$",
