@@ -69,15 +69,37 @@ class ConnectionProgressTracker(private val clock: () -> Long = System::currentT
     fun enter(stage: ConnectionStage, detail: String? = null) {
         _progress.update { current ->
             if (current == null || current.isFinished) return@update current
-            if (stage.ordinal < current.stage.ordinal) {
-                // Same stage revisited: let a new detail through, but don't restart the clock.
-                return@update if (stage == current.stage) current.copy(detail = detail) else current
+            when {
+                // Already past this stage: ignore entirely.
+                stage.ordinal < current.stage.ordinal -> current
+
+                // Re-reporting the stage we are already on. Leave the clock alone,
+                // and leave any detail alone unless a new one was supplied — a bare
+                // re-report must not wipe the detail line the connect log just set.
+                stage == current.stage ->
+                    if (detail == null) current else current.copy(detail = detail)
+
+                // Moving on. The detail belonged to the stage we are leaving, so it
+                // goes with it.
+                else -> current.copy(
+                    stage = stage,
+                    stageStartedAtMillis = clock(),
+                    detail = detail,
+                )
             }
-            if (stage == current.stage) {
-                current.copy(detail = detail)
-            } else {
-                current.copy(stage = stage, stageStartedAtMillis = clock(), detail = detail)
-            }
+        }
+    }
+
+    /**
+     * Replace the detail line shown under the running stage.
+     *
+     * Deliberately not sticky: the newest line wins, and [enter] drops it on the way
+     * to the next stage. This is a live readout of what is happening right now, not
+     * a record — the terminal's own connect log is the record.
+     */
+    fun detail(text: String?) {
+        _progress.update { current ->
+            if (current == null || current.isFinished) current else current.copy(detail = text)
         }
     }
 

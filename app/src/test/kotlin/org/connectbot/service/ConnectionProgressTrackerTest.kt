@@ -112,6 +112,52 @@ class ConnectionProgressTrackerTest {
     }
 
     @Test
+    fun detail_replacesTheCurrentDetail() {
+        tracker.begin()
+
+        tracker.detail("Connecting to example.com:22 via ssh")
+        assertEquals("Connecting to example.com:22 via ssh", progress?.detail)
+
+        tracker.detail("Key exchange algorithm: curve25519-sha256")
+        assertEquals("Key exchange algorithm: curve25519-sha256", progress?.detail)
+    }
+
+    // The connect log feeds the detail line and stage reports arrive independently,
+    // so a transport re-reporting the stage it is already on must not wipe it.
+
+    @Test
+    fun enter_sameStageWithoutDetail_keepsExistingDetail() {
+        tracker.begin()
+        tracker.detail("Looking up example.com")
+
+        tracker.enter(ConnectionStage.RESOLVING)
+
+        assertEquals("Looking up example.com", progress?.detail)
+    }
+
+    // Advancing does drop it: the detail described the stage being left.
+
+    @Test
+    fun enter_nextStage_clearsDetail() {
+        tracker.begin()
+        tracker.detail("Looking up example.com")
+
+        tracker.enter(ConnectionStage.HANDSHAKING)
+
+        assertNull(progress?.detail)
+    }
+
+    @Test
+    fun detail_afterFinish_isIgnored() {
+        tracker.begin()
+        tracker.cancel()
+
+        tracker.detail("too late")
+
+        assertNull(progress?.detail)
+    }
+
+    @Test
     fun setWaitingOnUser_togglesFlag() {
         tracker.begin()
 

@@ -413,8 +413,8 @@ class SSH :
             bridge?.dismissAuthBannersFrom(authBannerSourceName)
         }
 
-        bridge?.outputLine(manager?.res?.getString(R.string.terminal_auth))
         bridge?.reportConnectionStage(ConnectionStage.AUTHENTICATING)
+        bridge?.outputLine(manager?.res?.getString(R.string.terminal_auth))
 
         try {
             val currentHost = host ?: return
@@ -430,7 +430,6 @@ class SSH :
                 if (pubkeyId == HostConstants.PUBKEYID_ANY) {
                     // try each of the in-memory keys
                     bridge?.outputLine(manager?.res?.getString(R.string.terminal_auth_pubkey_any))
-                    bridge?.reportConnectionStage(ConnectionStage.AUTHENTICATING, AUTH_PUBLICKEY)
                     manager?.loadedKeypairs?.entries?.forEach { entry ->
                         if (entry.value.pubkey?.confirmation == true && !promptForPubkeyUse(entry.key)) {
                             return@forEach
@@ -445,7 +444,6 @@ class SSH :
                     }
                 } else {
                     bridge?.outputLine(manager?.res?.getString(R.string.terminal_auth_pubkey_specific))
-                    bridge?.reportConnectionStage(ConnectionStage.AUTHENTICATING, AUTH_PUBLICKEY)
                     // use a specific key for this host, as requested
                     val pubkey = manager?.pubkeyRepository?.getByIdBlocking(pubkeyId)
 
@@ -463,7 +461,6 @@ class SSH :
                 // this auth method will talk with us using InteractiveCallback interface
                 // it blocks until authentication finishes
                 bridge?.outputLine(manager?.res?.getString(R.string.terminal_auth_ki))
-                bridge?.reportConnectionStage(ConnectionStage.AUTHENTICATING, AUTH_KEYBOARDINTERACTIVE)
                 interactiveCanContinue = false
                 if (connection?.authenticateWithKeyboardInteractive(currentHost.username, this) == true) {
                     finishConnection()
@@ -484,7 +481,6 @@ class SSH :
 
                 // Fall back to password prompt
                 bridge?.outputLine(manager?.res?.getString(R.string.terminal_auth_pass))
-                bridge?.reportConnectionStage(ConnectionStage.AUTHENTICATING, AUTH_PASSWORD)
                 val password = bridge?.requestStringPrompt(
                     null,
                     manager?.res?.getString(R.string.prompt_password),
@@ -741,10 +737,9 @@ class SSH :
      * @return The authenticated Connection, or null if connection/authentication failed
      */
     private fun connectToJumpHost(jumpHost: Host): Connection? {
-        bridge?.outputLine(manager?.res?.getString(R.string.terminal_connecting_via_jump, jumpHost.nickname))
-
         preflightResolve(jumpHost.hostname)
-        bridge?.reportConnectionStage(ConnectionStage.HANDSHAKING, jumpHost.nickname)
+        bridge?.reportConnectionStage(ConnectionStage.HANDSHAKING)
+        bridge?.outputLine(manager?.res?.getString(R.string.terminal_connecting_via_jump, jumpHost.nickname))
 
         val jc = Connection(jumpHost.hostname, jumpHost.port)
         registerUserAuthBanner(jc, jumpHost.authBannerSourceName())

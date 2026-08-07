@@ -637,6 +637,8 @@ class TerminalBridge {
             )
         }
 
+        var lastMeaningfulLine: String? = null
+
         synchronized(localOutput) {
             for (line in output.split("\n".toRegex())) {
                 var processedLine = line
@@ -649,8 +651,20 @@ class TerminalBridge {
                 localOutput.add(s)
 
                 terminalEmulator.writeInput(s.encodeToByteArray())
+
+                processedLine.trim().takeIf { it.isNotEmpty() }?.let { lastMeaningfulLine = it }
             }
         }
+
+        // Mirror the connect log into the progress card as the running stage's detail
+        // line. Doing it here rather than at each call site means everything the log
+        // says — negotiated ciphers, host key fingerprints, which key is being tried,
+        // server auth banners — reaches the card without transports having to report
+        // anything twice, and stays in step if new output is added later.
+        //
+        // The log remains the durable record: it survives into the session scrollback,
+        // whereas the card only ever shows the newest line and then goes away.
+        lastMeaningfulLine?.let { connectionTracker.detail(it) }
     }
 
     /**

@@ -232,11 +232,51 @@ private fun StageRow(
     val hasFailed = isCurrent && snapshot.isFinished &&
         snapshot.outcome !is ConnectionOutcome.Succeeded
 
+    Column(modifier = Modifier.fillMaxWidth()) {
+        StageHeaderRow(
+            snapshot = snapshot,
+            textColor = textColor,
+            stage = stage,
+            isCurrent = isCurrent,
+            isDone = isDone,
+            hasFailed = hasFailed,
+        )
+
+        // Exactly one detail line exists at any moment — under whichever stage is
+        // running — so the card keeps a constant height as stages advance instead of
+        // growing and shrinking beneath the user. It is capped at one line for the
+        // same reason; this is a live readout, and the terminal log underneath keeps
+        // the full text.
+        if (isCurrent && !snapshot.isFinished) {
+            Text(
+                text = snapshot.detail.orEmpty(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Start,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = SYMBOL_COLUMN_WIDTH + 12.dp, bottom = 2.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun StageHeaderRow(
+    snapshot: ConnectionProgress,
+    textColor: Color,
+    stage: ConnectionStage,
+    isCurrent: Boolean,
+    isDone: Boolean,
+    hasFailed: Boolean,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 5.dp),
+            .padding(vertical = 3.dp),
     ) {
         // Column 1 — status symbol. Fixed width so the labels start on a common
         // left edge whatever symbol each row happens to be showing.
@@ -311,10 +351,11 @@ private fun stageLabel(
     val base = stringResource(stage.labelRes())
     if (!isCurrent) return base
 
-    val qualified = when {
-        snapshot.waitingOnUser -> "$base — ${stringResource(R.string.connecting_waiting_for_you)}"
-        snapshot.detail != null -> "$base (${snapshot.detail})"
-        else -> base
+    // The detail is no longer folded in here; it gets its own line below.
+    val qualified = if (snapshot.waitingOnUser) {
+        "$base — ${stringResource(R.string.connecting_waiting_for_you)}"
+    } else {
+        base
     }
 
     if (snapshot.isFinished) return qualified

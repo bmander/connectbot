@@ -109,10 +109,35 @@ class ConnectionProgressOverlayTest {
     }
 
     @Test
-    fun showsDetailBesideTheCurrentStage() {
-        setOverlay(progress(ConnectionStage.AUTHENTICATING, detail = "publickey"))
+    fun showsDetailUnderTheCurrentStage() {
+        setOverlay(
+            progress(
+                ConnectionStage.AUTHENTICATING,
+                detail = "Attempting 'publickey' authentication",
+            ),
+        )
 
-        composeTestRule.onNodeWithText("publickey", substring = true).assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText("Attempting 'publickey' authentication")
+            .assertIsDisplayed()
+    }
+
+    // The detail belongs to the running stage only. Showing it under a stage that
+    // has already finished would misreport what is happening now.
+
+    @Test
+    fun detailNotShownOnceAttemptFinished() {
+        setOverlay(
+            progress(
+                ConnectionStage.AUTHENTICATING,
+                detail = "Attempting 'publickey' authentication",
+                outcome = timedOut(),
+            ),
+        )
+
+        composeTestRule
+            .onNodeWithText("Attempting 'publickey' authentication")
+            .assertDoesNotExist()
     }
 
     @Test
