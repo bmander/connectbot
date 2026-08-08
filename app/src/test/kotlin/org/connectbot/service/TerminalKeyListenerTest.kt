@@ -17,12 +17,95 @@
 
 package org.connectbot.service
 
+import org.connectbot.terminal.VTermKey
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TerminalKeyListenerTest {
 
+    // Restated from the VTerm spec rather than imported from the implementation, so
+    // these assert the wire values rather than agreeing with whatever it produces.
+    private val vtermModShift = 1
+    private val vtermModCtrl = 4
+
     private val noopDispatcher = KeyDispatcher { _, _ -> }
+
+    /** Records what actually reached the terminal, as (modifiers, key) pairs. */
+    private class RecordingDispatcher : KeyDispatcher {
+        val sent = mutableListOf<Pair<Int, Int>>()
+        override fun dispatchKey(modifiers: Int, key: Int) {
+            sent += modifiers to key
+        }
+    }
+
+    // Tab and Escape used to dispatch with a hardcoded modifier mask of 0, so an
+    // active modifier was silently dropped for those two keys alone. Shift+Tab —
+    // how most full-screen programs cycle backwards — could not be produced at all.
+
+    @Test
+    fun `tab carries an active shift modifier`() {
+        val dispatcher = RecordingDispatcher()
+        val listener = TerminalKeyListener(dispatcher, StickyModifierSetting.NONE)
+
+        listener.metaPress(TerminalKeyListener.SHIFT_ON, forceSticky = true)
+        listener.sendTab()
+
+        assertEquals(listOf(vtermModShift to VTermKey.TAB), dispatcher.sent)
+    }
+
+    @Test
+    fun `escape carries an active modifier`() {
+        val dispatcher = RecordingDispatcher()
+        val listener = TerminalKeyListener(dispatcher, StickyModifierSetting.NONE)
+
+        listener.metaPress(TerminalKeyListener.CTRL_ON, forceSticky = true)
+        listener.sendEscape()
+
+        assertEquals(listOf(vtermModCtrl to VTermKey.ESCAPE), dispatcher.sent)
+    }
+
+    @Test
+    fun `tab sends no modifiers when none are active`() {
+        val dispatcher = RecordingDispatcher()
+        val listener = TerminalKeyListener(dispatcher, StickyModifierSetting.NONE)
+
+        listener.sendTab()
+
+        assertEquals(listOf(0 to VTermKey.TAB), dispatcher.sent)
+    }
+
+    // A transient modifier is consumed by the keypress it modifies; a locked one is
+    // not, or one-handed use would need re-pressing shift for every keystroke.
+
+    @Test
+    fun `transient shift is cleared by tab but a lock survives`() {
+        val dispatcher = RecordingDispatcher()
+        val listener = TerminalKeyListener(dispatcher, StickyModifierSetting.NONE)
+
+        listener.metaPress(TerminalKeyListener.SHIFT_ON, forceSticky = true)
+        listener.sendTab()
+        assertEquals(ModifierLevel.OFF, listener.getModifierState().shiftState)
+
+        listener.metaPress(TerminalKeyListener.SHIFT_ON, forceSticky = true)
+        listener.metaPress(TerminalKeyListener.SHIFT_ON, forceSticky = true)
+        listener.sendTab()
+        assertEquals(ModifierLevel.LOCKED, listener.getModifierState().shiftState)
+        assertEquals(vtermModShift to VTermKey.TAB, dispatcher.sent.last())
+    }
+
+    @Test
+    fun `shift cycles OFF to TRANSIENT to LOCKED to OFF`() {
+        val listener = TerminalKeyListener(noopDispatcher, StickyModifierSetting.NONE)
+
+        listener.metaPress(TerminalKeyListener.SHIFT_ON, forceSticky = true)
+        assertEquals(ModifierLevel.TRANSIENT, listener.getModifierState().shiftState)
+
+        listener.metaPress(TerminalKeyListener.SHIFT_ON, forceSticky = true)
+        assertEquals(ModifierLevel.LOCKED, listener.getModifierState().shiftState)
+
+        listener.metaPress(TerminalKeyListener.SHIFT_ON, forceSticky = true)
+        assertEquals(ModifierLevel.OFF, listener.getModifierState().shiftState)
+    }
 
     // NONE: sticky is OFF for all modifiers. metaPress only works if forceSticky=true.
 

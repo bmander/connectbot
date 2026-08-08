@@ -918,6 +918,7 @@
 	<!-- Describes the icon of the "send control character" button in the terminal view for
 	     accessibility purposes. -->
 	<string name="image_description_toggle_control_character">Toggle control character.</string>
+	<string name="image_description_toggle_shift">Toggle shift.</string>
 
 	<!-- Describes the icon of the "send escape character" button in the terminal view for
 	     accessibility purposes. -->
@@ -955,6 +956,7 @@
 	<string name="button_key_esc">Esc</string>
 	<!-- Text for the "Ctrl" button in virtual keyboard. -->
 	<string name="button_key_ctrl">Ctrl</string>
+	<string name="button_key_shift">Shift</string>
 
 	<!-- Text for the "Home" button in virtual keyboard. -->
 	<string name="button_key_home">Home</string>

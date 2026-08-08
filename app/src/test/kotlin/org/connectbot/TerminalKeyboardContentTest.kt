@@ -172,6 +172,7 @@ class TerminalKeyboardContentTest {
             shiftState = ModifierLevel.OFF,
         ),
         onCtrlPress: () -> Unit = {},
+        onShiftPress: () -> Unit = {},
         onEscPress: () -> Unit = {},
         onTabPress: () -> Unit = {},
         onKeyPress: (Int) -> Unit = {},
@@ -188,6 +189,7 @@ class TerminalKeyboardContentTest {
                 TerminalKeyboardContent(
                     modifierState = modifierState,
                     onCtrlPress = onCtrlPress,
+                    onShiftPress = onShiftPress,
                     onEscPress = onEscPress,
                     onTabPress = onTabPress,
                     onKeyPress = onKeyPress,

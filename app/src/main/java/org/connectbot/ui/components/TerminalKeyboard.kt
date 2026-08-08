@@ -124,6 +124,10 @@ fun TerminalKeyboard(
             keyHandler.metaPress(TerminalKeyListener.CTRL_ON, true)
             onInteraction()
         },
+        onShiftPress = {
+            keyHandler.metaPress(TerminalKeyListener.SHIFT_ON, true)
+            onInteraction()
+        },
         onEscPress = {
             keyHandler.sendEscape()
             onInteraction()
@@ -156,6 +160,7 @@ fun TerminalKeyboard(
 internal fun TerminalKeyboardContent(
     modifierState: ModifierState,
     onCtrlPress: () -> Unit,
+    onShiftPress: () -> Unit,
     onEscPress: () -> Unit,
     onTabPress: () -> Unit,
     onKeyPress: (Int) -> Unit,
@@ -236,6 +241,15 @@ internal fun TerminalKeyboardContent(
                     contentDescription = stringResource(R.string.image_description_toggle_control_character),
                     modifierLevel = modifierState.ctrlState,
                     onClick = onCtrlPress,
+                )
+
+                // Shift key (sticky modifier). An on-screen button cannot be held
+                // down, so like Ctrl it toggles OFF -> TRANSIENT -> LOCKED.
+                ModifierKeyButton(
+                    text = stringResource(R.string.button_key_shift),
+                    contentDescription = stringResource(R.string.image_description_toggle_shift),
+                    modifierLevel = modifierState.shiftState,
+                    onClick = onShiftPress,
                 )
 
                 // Esc key
@@ -640,6 +654,7 @@ private fun TerminalKeyboardPreview() {
                 shiftState = ModifierLevel.OFF,
             ),
             onCtrlPress = {},
+            onShiftPress = {},
             onEscPress = {},
             onTabPress = {},
             onKeyPress = {},
@@ -666,6 +681,7 @@ private fun TerminalKeyboardCtrlPressedPreview() {
                 shiftState = ModifierLevel.OFF,
             ),
             onCtrlPress = {},
+            onShiftPress = {},
             onEscPress = {},
             onTabPress = {},
             onKeyPress = {},
@@ -692,6 +708,7 @@ private fun TerminalKeyboardCtrlLockedPreview() {
                 shiftState = ModifierLevel.OFF,
             ),
             onCtrlPress = {},
+            onShiftPress = {},
             onEscPress = {},
             onTabPress = {},
             onKeyPress = {},
@@ -718,6 +735,7 @@ private fun TerminalKeyboardImeVisiblePreview() {
                 shiftState = ModifierLevel.OFF,
             ),
             onCtrlPress = {},
+            onShiftPress = {},
             onEscPress = {},
             onTabPress = {},
             onKeyPress = {},
