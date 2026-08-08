@@ -29,17 +29,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -71,6 +77,12 @@ private const val ELAPSED_VISIBLE_AFTER_MILLIS = 3_000L
 /** How long the all-ticks state is held before the overlay fades out. */
 private const val SUCCESS_DWELL_MILLIS = 300L
 
+/** Lines of failure text shown before the expand chevron appears. */
+private const val COLLAPSED_FAILURE_LINES = 3
+
+/** Ceiling on the expanded failure text; beyond this it scrolls inside the card. */
+private val EXPANDED_FAILURE_MAX_HEIGHT = 150.dp
+
 /** Status symbol column. */
 private val SYMBOL_COLUMN_WIDTH = 24.dp
 
@@ -87,6 +99,7 @@ const val TAG_CONNECTION_PROGRESS_OVERLAY = "connection_progress_overlay"
 const val TAG_CONNECTION_PROGRESS_CANCEL = "connection_progress_cancel"
 const val TAG_CONNECTION_PROGRESS_RETRY = "connection_progress_retry"
 const val TAG_CONNECTION_PROGRESS_CLOSE = "connection_progress_close"
+const val TAG_CONNECTION_PROGRESS_EXPAND_ERROR = "connection_progress_expand_error"
 
 /**
  * Shows which phase of connecting is underway, and offers a way out of one that is
@@ -166,19 +179,7 @@ fun ConnectionProgressOverlay(
                 }
 
                 snapshot.outcome?.failureText()?.let { text ->
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center,
-                        // Root-cause messages from the platform can be long — the
-                        // errno text repeats both endpoints and the elapsed time.
-                        // Bounded here so the card cannot grow off-screen; the log
-                        // underneath still carries the whole chain.
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
+                    FailureText(text = text)
                 }
 
                 // The available action depends on where the attempt got to. While it
@@ -221,6 +222,70 @@ fun ConnectionProgressOverlay(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The failure reason, truncated until asked to expand.
+ *
+ * Root-cause messages from the platform run long — the errno text repeats both
+ * endpoints and the elapsed time — so showing one in full by default would push the
+ * card off screen. Collapsed it stays short; the chevron appears only when there is
+ * genuinely more to read, so a one-line reason gets no chrome at all.
+ */
+@Composable
+private fun FailureText(text: String) {
+    // Keyed on the text so a new failure starts collapsed and re-measures rather than
+    // inheriting the previous one's expansion.
+    var expanded by remember(text) { mutableStateOf(false) }
+    var truncated by remember(text) { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = if (expanded) TextAlign.Start else TextAlign.Center,
+            maxLines = if (expanded) Int.MAX_VALUE else COLLAPSED_FAILURE_LINES,
+            overflow = TextOverflow.Ellipsis,
+            // Only measured while collapsed: expanded has no cap, so it never reports
+            // overflow, and reading it then would hide the control needed to collapse.
+            onTextLayout = { if (!expanded) truncated = it.hasVisualOverflow },
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    // Bounded even when expanded, so a pathological message scrolls
+                    // inside the card rather than growing it without limit.
+                    if (expanded) {
+                        Modifier
+                            .heightIn(max = EXPANDED_FAILURE_MAX_HEIGHT)
+                            .verticalScroll(scrollState)
+                    } else {
+                        Modifier
+                    },
+                ),
+        )
+
+        if (truncated) {
+            IconButton(
+                onClick = { expanded = !expanded },
+                modifier = Modifier.testTag(TAG_CONNECTION_PROGRESS_EXPAND_ERROR),
+            ) {
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.connecting_error_show_less else R.string.connecting_error_show_all,
+                    ),
+                    tint = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }

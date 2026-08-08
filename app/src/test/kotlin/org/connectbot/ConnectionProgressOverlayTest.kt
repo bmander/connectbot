@@ -19,6 +19,7 @@ package org.connectbot
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -31,6 +32,7 @@ import org.connectbot.service.ConnectionStage
 import org.connectbot.ui.components.ConnectionProgressOverlay
 import org.connectbot.ui.components.TAG_CONNECTION_PROGRESS_CANCEL
 import org.connectbot.ui.components.TAG_CONNECTION_PROGRESS_CLOSE
+import org.connectbot.ui.components.TAG_CONNECTION_PROGRESS_EXPAND_ERROR
 import org.connectbot.ui.components.TAG_CONNECTION_PROGRESS_OVERLAY
 import org.connectbot.ui.components.TAG_CONNECTION_PROGRESS_RETRY
 import org.connectbot.ui.theme.ConnectBotTheme
@@ -39,9 +41,15 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.GraphicsMode
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
+// The expand chevron appears only when the reason genuinely overflows, which needs
+// real text measurement; the default LEGACY graphics mode measures every glyph as
+// zero-width, so nothing ever wraps. Scoped to this class rather than set in
+// robolectric.properties so the rest of the suite keeps its existing behaviour.
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ConnectionProgressOverlayTest {
     @get:Rule(order = 0)
     val hiltRule = HiltAndroidRule(this)
@@ -69,6 +77,13 @@ class ConnectionProgressOverlayTest {
     )
 
     private fun timedOut() = ConnectionOutcome.TimedOut(ConnectionStage.HANDSHAKING, 30_000L)
+
+    /** The shape of a real root-cause message: long enough to overflow three lines. */
+    private fun longFailure() = ConnectionOutcome.Failed(
+        ConnectionStage.HANDSHAKING,
+        "failed to connect to /100.87.22.3 (port 22) from /100.103.1.11 (port 33068) " +
+            "after 30000ms: isConnected failed: ECONNREFUSED (Connection refused)",
+    )
 
     private fun setOverlay(
         value: ConnectionProgress?,
@@ -259,6 +274,64 @@ class ConnectionProgressOverlayTest {
         )
 
         composeTestRule.onNodeWithText("Auth fail").assertIsDisplayed()
+    }
+
+    // A short reason needs no chrome; only a truncated one earns the chevron.
+
+    @Test
+    fun shortFailureHasNoExpandControl() {
+        setOverlay(
+            progress(
+                ConnectionStage.HANDSHAKING,
+                outcome = ConnectionOutcome.Failed(ConnectionStage.HANDSHAKING, "No route to host"),
+            ),
+        )
+
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_EXPAND_ERROR).assertDoesNotExist()
+    }
+
+    @Test
+    fun longFailureOffersExpandControl() {
+        setOverlay(progress(ConnectionStage.HANDSHAKING, outcome = longFailure()))
+
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_EXPAND_ERROR).assertIsDisplayed()
+    }
+
+    @Test
+    fun expandControlTogglesBetweenShowAllAndShowLess() {
+        setOverlay(progress(ConnectionStage.HANDSHAKING, outcome = longFailure()))
+
+        composeTestRule
+            .onNodeWithContentDescription(
+                composeTestRule.activity.getString(R.string.connecting_error_show_all),
+            )
+            .assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_EXPAND_ERROR).performClick()
+
+        composeTestRule
+            .onNodeWithContentDescription(
+                composeTestRule.activity.getString(R.string.connecting_error_show_less),
+            )
+            .assertIsDisplayed()
+    }
+
+    // Expanding must stay reversible. Overflow is only measured while collapsed —
+    // an expanded Text has no cap and so reports none — and a naive implementation
+    // loses the very control needed to collapse again.
+
+    @Test
+    fun expandedFailureCanBeCollapsedAgain() {
+        setOverlay(progress(ConnectionStage.HANDSHAKING, outcome = longFailure()))
+
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_EXPAND_ERROR).performClick()
+        composeTestRule.onNodeWithTag(TAG_CONNECTION_PROGRESS_EXPAND_ERROR).performClick()
+
+        composeTestRule
+            .onNodeWithContentDescription(
+                composeTestRule.activity.getString(R.string.connecting_error_show_all),
+            )
+            .assertIsDisplayed()
     }
 
     @Test

@@ -380,6 +380,10 @@
 	<string name="connecting_timed_out">"Timed out after %1$ds"</string>
 	<!-- Shown when the user cancelled the attempt -->
 	<string name="connecting_cancelled">"Cancelled"</string>
+	<!-- Content description for the control that expands a truncated error message -->
+	<string name="connecting_error_show_all">"Show the full error"</string>
+	<!-- Content description for the control that collapses an expanded error message -->
+	<string name="connecting_error_show_less">"Show less of the error"</string>
 	<!-- Shown when connecting failed for an unspecified reason -->
 	<string name="connecting_failed">"Connection failed"</string>
 
