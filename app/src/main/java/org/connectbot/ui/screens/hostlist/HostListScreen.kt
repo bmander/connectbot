@@ -538,14 +538,8 @@ private fun HostListItem(
     // Determine border color based on connection state
     val borderColor = when (connectionState) {
         ConnectionState.CONNECTED -> colorResource(R.color.host_green)
-
-        // Green
         ConnectionState.CONNECTING -> colorResource(R.color.host_amber)
-
-        // Amber
         ConnectionState.DISCONNECTED -> colorResource(R.color.host_red)
-
-        // Red
         ConnectionState.UNKNOWN -> Color.Transparent
     }
 

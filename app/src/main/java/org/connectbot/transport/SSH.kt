@@ -933,25 +933,21 @@ class SSH :
      * and would forfeit sshlib's dual-stack Happy Eyeballs racing. The repeat lookup
      * is served from the platform DNS cache.
      *
-     * @return the addresses found, or empty when [hostname] is already a literal.
+     * @return the addresses found, formatted for display, or [hostname] itself when
+     *   it is already a literal.
      */
-    private fun preflightResolve(hostname: String): List<InetAddress> {
-        if (HostConstants.isIpAddress(hostname)) return emptyList()
+    private fun preflightResolve(hostname: String): String {
+        if (HostConstants.isIpAddress(hostname)) return hostname
 
         bridge?.reportConnectionStage(ConnectionStage.RESOLVING)
-        val addresses = InetAddress.getAllByName(hostname).toList()
+        val addresses = InetAddress.getAllByName(hostname)
+            .joinToString(", ") { it.hostAddress ?: it.toString() }
 
         // Worth saying out loud. Which address a name resolved to is the difference
         // between "wrong host" and "right host, no route" — and on a split-DNS setup
         // such as a VPN it is the only way to see whether the tunnel's resolver
         // answered at all.
-        bridge?.outputLine(
-            manager?.res?.getString(
-                R.string.terminal_resolved,
-                hostname,
-                addresses.joinToString(", ") { it.hostAddress ?: it.toString() },
-            ),
-        )
+        bridge?.outputLine(manager?.res?.getString(R.string.terminal_resolved, hostname, addresses))
         return addresses
     }
 
@@ -989,7 +985,14 @@ class SSH :
             }
         }
 
-        val resolved = preflightResolve(currentHost.hostname)
+        val resolved = if (directJumpConnection == null) {
+            preflightResolve(currentHost.hostname)
+        } else {
+            // The bastion resolves the target — JumpHostProxyData forwards the
+            // hostname, never an address — so looking it up locally is wasted work,
+            // and fails outright when the name only exists in the bastion's DNS view.
+            currentHost.hostname
+        }
 
         connection = Connection(currentHost.hostname, currentHost.port)
         connection?.addConnectionMonitor(this)
@@ -1015,8 +1018,7 @@ class SSH :
             bridge?.outputLine(
                 manager?.res?.getString(
                     R.string.terminal_contacting,
-                    resolved.joinToString(", ") { it.hostAddress ?: it.toString() }
-                        .ifEmpty { currentHost.hostname },
+                    resolved,
                     currentHost.port,
                 ),
             )

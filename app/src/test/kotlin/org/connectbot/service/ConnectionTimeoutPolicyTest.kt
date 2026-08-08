@@ -17,6 +17,7 @@
 
 package org.connectbot.service
 
+import org.connectbot.util.PreferenceConstants
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -78,10 +79,13 @@ class ConnectionTimeoutPolicyTest {
         assertEquals(ConnectionTimeouts.NONE, ConnectionTimeouts.fromBaseMillis(-1L))
     }
 
+    // The shipped default and the fallback used when no manager is available must be
+    // the same number, or changing the settings list would silently leave the
+    // fallback behind.
     @Test
-    fun default_usesDefaultBase() {
+    fun default_matchesTheShippedPreferenceDefault() {
         assertEquals(
-            ConnectionTimeouts.fromBaseMillis(ConnectionTimeouts.DEFAULT_BASE_MILLIS),
+            ConnectionTimeouts.fromBaseMillis(PreferenceConstants.DEFAULT_CONNECT_TIMEOUT.toLong() * 1000L),
             ConnectionTimeouts.DEFAULT,
         )
     }

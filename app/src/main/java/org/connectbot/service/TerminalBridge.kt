@@ -504,12 +504,13 @@ class TerminalBridge {
     /**
      * Report which phase of connecting we have reached.
      *
-     * Transports call this alongside the [outputLine] calls they already make. A
-     * transport that never calls it still works — the overlay just shows a single
-     * indeterminate stage — so instrumenting a transport is optional.
+     * Transports call this alongside the [outputLine] calls they already make, which
+     * supply the detail line beneath it. A transport that never calls it still works
+     * — the overlay just shows a single indeterminate stage — so instrumenting a
+     * transport is optional.
      */
-    fun reportConnectionStage(stage: ConnectionStage, detail: String? = null) {
-        connectionTracker.enter(stage, detail)
+    fun reportConnectionStage(stage: ConnectionStage) {
+        connectionTracker.enter(stage)
     }
 
     /**
@@ -668,7 +669,7 @@ class TerminalBridge {
 
                 terminalEmulator.writeInput(s.encodeToByteArray())
 
-                processedLine.trim().takeIf { it.isNotEmpty() }?.let { lastMeaningfulLine = it }
+                if (processedLine.isNotBlank()) lastMeaningfulLine = processedLine.trim()
             }
         }
 
@@ -826,10 +827,7 @@ class TerminalBridge {
         if (!connecting) return
 
         connectAbandoned = true
-        when (outcome) {
-            is ConnectionOutcome.TimedOut -> connectionTracker.timeOut(outcome.stage, outcome.budgetMillis)
-            else -> connectionTracker.cancel()
-        }
+        connectionTracker.record(outcome)
 
         watchdogJob?.cancel()
         // Unblocks any prompt the attempt is parked on. The cancellation path there

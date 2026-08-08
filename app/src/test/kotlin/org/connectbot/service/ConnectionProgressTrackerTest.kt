@@ -40,18 +40,8 @@ class ConnectionProgressTrackerTest {
         tracker.begin()
 
         assertEquals(ConnectionStage.RESOLVING, progress?.stage)
-        assertEquals(1_000L, progress?.startedAtMillis)
         assertEquals(1_000L, progress?.stageStartedAtMillis)
         assertNull(progress?.outcome)
-    }
-
-    @Test
-    fun begin_incrementsAttemptId() {
-        val first = tracker.begin()
-        val second = tracker.begin()
-
-        assertTrue(second > first)
-        assertEquals(second, tracker.attemptId)
     }
 
     @Test
@@ -62,17 +52,7 @@ class ConnectionProgressTrackerTest {
         tracker.enter(ConnectionStage.HANDSHAKING)
 
         assertEquals(ConnectionStage.HANDSHAKING, progress?.stage)
-        assertEquals(1_000L, progress?.startedAtMillis)
         assertEquals(3_000L, progress?.stageStartedAtMillis)
-    }
-
-    @Test
-    fun enter_carriesDetail() {
-        tracker.begin()
-
-        tracker.enter(ConnectionStage.AUTHENTICATING, "publickey")
-
-        assertEquals("publickey", progress?.detail)
     }
 
     // Transports report opportunistically and the auth loop can revisit an earlier
@@ -89,29 +69,6 @@ class ConnectionProgressTrackerTest {
     }
 
     @Test
-    fun enter_sameStageUpdatesDetailWithoutRestartingClock() {
-        tracker.begin()
-        tracker.enter(ConnectionStage.AUTHENTICATING, "publickey")
-        now = 9_000L
-
-        tracker.enter(ConnectionStage.AUTHENTICATING, "password")
-
-        assertEquals("password", progress?.detail)
-        assertEquals(1_000L, progress?.stageStartedAtMillis)
-    }
-
-    @Test
-    fun completedStages_derivedFromOrdinal() {
-        tracker.begin()
-        tracker.enter(ConnectionStage.VERIFYING_HOST_KEY)
-
-        assertEquals(
-            listOf(ConnectionStage.RESOLVING, ConnectionStage.HANDSHAKING),
-            progress?.completedStages(),
-        )
-    }
-
-    @Test
     fun detail_replacesTheCurrentDetail() {
         tracker.begin()
 
@@ -120,19 +77,6 @@ class ConnectionProgressTrackerTest {
 
         tracker.detail("Key exchange algorithm: curve25519-sha256")
         assertEquals("Key exchange algorithm: curve25519-sha256", progress?.detail)
-    }
-
-    // The connect log feeds the detail line and stage reports arrive independently,
-    // so a transport re-reporting the stage it is already on must not wipe it.
-
-    @Test
-    fun enter_sameStageWithoutDetail_keepsExistingDetail() {
-        tracker.begin()
-        tracker.detail("Looking up example.com")
-
-        tracker.enter(ConnectionStage.RESOLVING)
-
-        assertEquals("Looking up example.com", progress?.detail)
     }
 
     // Advancing does drop it: the detail described the stage being left.
@@ -150,7 +94,7 @@ class ConnectionProgressTrackerTest {
     @Test
     fun detail_afterFinish_isIgnored() {
         tracker.begin()
-        tracker.cancel()
+        tracker.record(ConnectionOutcome.Cancelled)
 
         tracker.detail("too late")
 
@@ -183,7 +127,7 @@ class ConnectionProgressTrackerTest {
         tracker.begin()
         tracker.enter(ConnectionStage.HANDSHAKING)
 
-        tracker.timeOut(ConnectionStage.HANDSHAKING, 30_000L)
+        tracker.record(ConnectionOutcome.TimedOut(ConnectionStage.HANDSHAKING, 30_000L))
 
         assertEquals(
             ConnectionOutcome.TimedOut(ConnectionStage.HANDSHAKING, 30_000L),
@@ -210,9 +154,9 @@ class ConnectionProgressTrackerTest {
     @Test
     fun outcomesAreSticky() {
         tracker.begin()
-        tracker.cancel()
+        tracker.record(ConnectionOutcome.Cancelled)
 
-        tracker.timeOut(ConnectionStage.HANDSHAKING, 30_000L)
+        tracker.record(ConnectionOutcome.TimedOut(ConnectionStage.HANDSHAKING, 30_000L))
         tracker.succeed()
 
         assertEquals(ConnectionOutcome.Cancelled, progress?.outcome)
@@ -240,7 +184,7 @@ class ConnectionProgressTrackerTest {
         tracker.begin()
         tracker.fail(ConnectionStage.HANDSHAKING, null)
 
-        tracker.timeOut(ConnectionStage.HANDSHAKING, 30_000L)
+        tracker.record(ConnectionOutcome.TimedOut(ConnectionStage.HANDSHAKING, 30_000L))
 
         assertEquals(
             ConnectionOutcome.TimedOut(ConnectionStage.HANDSHAKING, 30_000L),
@@ -280,7 +224,7 @@ class ConnectionProgressTrackerTest {
     @Test
     fun cancellation_isNotReplacedByAFailure() {
         tracker.begin()
-        tracker.cancel()
+        tracker.record(ConnectionOutcome.Cancelled)
 
         tracker.fail(ConnectionStage.HANDSHAKING, "No route to host")
 
@@ -290,7 +234,7 @@ class ConnectionProgressTrackerTest {
     @Test
     fun enter_afterFinish_isIgnored() {
         tracker.begin()
-        tracker.cancel()
+        tracker.record(ConnectionOutcome.Cancelled)
 
         tracker.enter(ConnectionStage.OPENING_SESSION)
 
@@ -302,7 +246,7 @@ class ConnectionProgressTrackerTest {
         tracker.begin()
         tracker.setWaitingOnUser(true)
 
-        tracker.cancel()
+        tracker.record(ConnectionOutcome.Cancelled)
 
         assertFalse(progress?.waitingOnUser == true)
     }
@@ -316,14 +260,5 @@ class ConnectionProgressTrackerTest {
 
         assertNull(progress?.outcome)
         assertEquals(ConnectionStage.RESOLVING, progress?.stage)
-    }
-
-    @Test
-    fun clear_hidesProgress() {
-        tracker.begin()
-
-        tracker.clear()
-
-        assertNull(progress)
     }
 }

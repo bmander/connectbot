@@ -20,6 +20,9 @@ package org.connectbot.service
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import org.connectbot.util.PreferenceConstants
 
 /**
  * How long each connection phase may take before the attempt is abandoned.
@@ -34,13 +37,11 @@ data class ConnectionTimeouts(
     val session: Long?,
 ) {
     companion object {
-        /** The base value behind the default preference, in milliseconds. */
-        const val DEFAULT_BASE_MILLIS = 30_000L
-
         /** Sentinel for the "Never" preference option. */
         const val DISABLED = 0L
 
-        val DEFAULT = fromBaseMillis(DEFAULT_BASE_MILLIS)
+        /** Derived from the shipped preference default, so the two cannot drift. */
+        val DEFAULT = fromBaseMillis(PreferenceConstants.DEFAULT_CONNECT_TIMEOUT.toLong() * 1000L)
 
         val NONE = ConnectionTimeouts(null, null, null, null, null)
 
@@ -91,29 +92,49 @@ object ConnectionTimeoutPolicy {
     }
 }
 
+/** Just the fields the watchdog reacts to, so unrelated changes cannot disturb it. */
+private data class WatchedState(
+    val stage: ConnectionStage,
+    val waitingOnUser: Boolean,
+    val isFinished: Boolean,
+)
+
 /**
  * Watch [progress] and invoke [onTimeout] when a stage overruns its budget.
  *
- * Built on [collectLatest], which cancels the pending delay whenever a new snapshot
+ * Built on [collectLatest], which cancels the pending delay whenever a new value
  * arrives. That gives the re-arming behaviour for free: advancing a stage restarts
  * the clock, entering a prompt disarms it, and answering the prompt starts it again
  * from full — no timer bookkeeping, and nothing to leak if the caller is cancelled.
  *
- * Suspends until the attempt finishes or the caller is cancelled.
+ * The snapshot is narrowed to [WatchedState] first, which matters rather than being
+ * tidiness: every line the connect log mirrors into the progress detail produces a
+ * new snapshot, and collecting those directly would restart the deadline on each
+ * one — so a stage that kept chattering could never time out at all.
+ *
+ * A finished attempt is passed through rather than completing the flow: on upstream
+ * completion collectLatest *waits* for the in-flight action instead of cancelling it,
+ * so ending the stream would let the pending delay run out and fire a timeout for an
+ * attempt that had already succeeded.
+ *
+ * Suspends until the caller is cancelled.
  */
 suspend fun watchConnection(
     progress: Flow<ConnectionProgress?>,
     timeouts: ConnectionTimeouts,
     onTimeout: (ConnectionStage, Long) -> Unit,
 ) {
-    progress.collectLatest { snapshot ->
-        if (snapshot == null || snapshot.isFinished) return@collectLatest
-        val budget = ConnectionTimeoutPolicy.budgetFor(
-            snapshot.stage,
-            timeouts,
-            snapshot.waitingOnUser,
-        ) ?: return@collectLatest
-        delay(budget)
-        onTimeout(snapshot.stage, budget)
-    }
+    progress
+        .map { it?.let { s -> WatchedState(s.stage, s.waitingOnUser, s.isFinished) } }
+        .distinctUntilChanged()
+        .collectLatest { watched ->
+            if (watched == null || watched.isFinished) return@collectLatest
+            val budget = ConnectionTimeoutPolicy.budgetFor(
+                watched.stage,
+                timeouts,
+                watched.waitingOnUser,
+            ) ?: return@collectLatest
+            delay(budget)
+            onTimeout(watched.stage, budget)
+        }
 }

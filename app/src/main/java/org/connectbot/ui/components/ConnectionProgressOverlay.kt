@@ -171,11 +171,7 @@ fun ConnectionProgressOverlay(
                 )
 
                 ConnectionStage.entries.forEach { stage ->
-                    StageRow(
-                        stage = stage,
-                        snapshot = snapshot,
-                        textColor = MaterialTheme.colorScheme.onSurface,
-                    )
+                    StageRow(stage = stage, snapshot = snapshot)
                 }
 
                 snapshot.outcome?.failureText()?.let { text ->
@@ -295,7 +291,6 @@ private fun FailureText(text: String) {
 private fun StageRow(
     stage: ConnectionStage,
     snapshot: ConnectionProgress,
-    textColor: Color,
 ) {
     val isCurrent = stage == snapshot.stage
     val isDone = stage.ordinal < snapshot.stage.ordinal ||
@@ -306,7 +301,6 @@ private fun StageRow(
     Column(modifier = Modifier.fillMaxWidth()) {
         StageHeaderRow(
             snapshot = snapshot,
-            textColor = textColor,
             stage = stage,
             isCurrent = isCurrent,
             isDone = isDone,
@@ -342,12 +336,12 @@ private fun StageRow(
 @Composable
 private fun StageHeaderRow(
     snapshot: ConnectionProgress,
-    textColor: Color,
     stage: ConnectionStage,
     isCurrent: Boolean,
     isDone: Boolean,
     hasFailed: Boolean,
 ) {
+    val textColor = MaterialTheme.colorScheme.onSurface
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -452,9 +446,13 @@ private fun elapsedLabel(stageStartedAtMillis: Long): String? {
     var now by remember(stageStartedAtMillis) { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(stageStartedAtMillis) {
+        // Sit out the dead zone first — ticking through it renders the same empty
+        // label three times — then follow the second boundary rather than drifting
+        // off it by a fixed cadence.
+        delay((stageStartedAtMillis + ELAPSED_VISIBLE_AFTER_MILLIS - System.currentTimeMillis()).coerceAtLeast(0))
         while (true) {
-            delay(1_000)
             now = System.currentTimeMillis()
+            delay(1_000)
         }
     }
 

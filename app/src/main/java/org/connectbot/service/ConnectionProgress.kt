@@ -26,7 +26,6 @@ package org.connectbot.service
  * or not anyone was looking.
  *
  * @param stage the phase currently in progress.
- * @param startedAtMillis when the attempt as a whole began.
  * @param stageStartedAtMillis when [stage] began.
  * @param detail context worth showing beside the stage label, such as a jump host
  *   nickname or the authentication method being tried.
@@ -37,7 +36,6 @@ package org.connectbot.service
  */
 data class ConnectionProgress(
     val stage: ConnectionStage,
-    val startedAtMillis: Long,
     val stageStartedAtMillis: Long,
     val detail: String? = null,
     val waitingOnUser: Boolean = false,
@@ -46,7 +44,4 @@ data class ConnectionProgress(
     /** True once [outcome] is set, whether the attempt succeeded or not. */
     val isFinished: Boolean
         get() = outcome != null
-
-    /** Stages that completed before [stage]. */
-    fun completedStages(): List<ConnectionStage> = ConnectionStage.entries.filter { it.ordinal < stage.ordinal }
 }

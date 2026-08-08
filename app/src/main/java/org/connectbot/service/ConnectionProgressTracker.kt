@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Tracks a single connection attempt and publishes it as observable state.
@@ -36,56 +35,28 @@ class ConnectionProgressTracker(private val clock: () -> Long = System::currentT
     private val _progress = MutableStateFlow<ConnectionProgress?>(null)
     val progress: StateFlow<ConnectionProgress?> = _progress.asStateFlow()
 
-    private val _attemptId = AtomicLong(0)
-
-    /**
-     * Identifies the current attempt.
-     *
-     * A transport captures this when it starts and re-checks it before reporting
-     * success, so that a handshake which completes after the user cancelled cannot
-     * resurrect a bridge that has already been torn down.
-     */
-    val attemptId: Long
-        get() = _attemptId.get()
-
-    /** Begin a new attempt, discarding any previous one. Returns the new [attemptId]. */
-    fun begin(): Long {
-        val now = clock()
+    /** Begin a new attempt, discarding any previous one. */
+    fun begin() {
         _progress.value = ConnectionProgress(
             stage = ConnectionStage.entries.first(),
-            startedAtMillis = now,
-            stageStartedAtMillis = now,
+            stageStartedAtMillis = clock(),
         )
-        return _attemptId.incrementAndGet()
     }
 
     /**
      * Advance to [stage].
      *
-     * Ignored if the attempt has already finished, or if [stage] is not ahead of the
-     * current one — transports report opportunistically and a retry loop can revisit
-     * an earlier phase, but progress the user sees should only ever move forward.
+     * Ignored unless [stage] is genuinely ahead of the current one — transports
+     * report opportunistically and the auth loop can revisit an earlier phase, but
+     * progress the user sees should only ever move forward. The detail belonged to
+     * the stage being left, so it goes with it.
      */
-    fun enter(stage: ConnectionStage, detail: String? = null) {
+    fun enter(stage: ConnectionStage) {
         _progress.update { current ->
-            if (current == null || current.isFinished) return@update current
-            when {
-                // Already past this stage: ignore entirely.
-                stage.ordinal < current.stage.ordinal -> current
-
-                // Re-reporting the stage we are already on. Leave the clock alone,
-                // and leave any detail alone unless a new one was supplied — a bare
-                // re-report must not wipe the detail line the connect log just set.
-                stage == current.stage ->
-                    if (detail == null) current else current.copy(detail = detail)
-
-                // Moving on. The detail belonged to the stage we are leaving, so it
-                // goes with it.
-                else -> current.copy(
-                    stage = stage,
-                    stageStartedAtMillis = clock(),
-                    detail = detail,
-                )
+            if (current == null || current.isFinished || stage.ordinal <= current.stage.ordinal) {
+                current
+            } else {
+                current.copy(stage = stage, stageStartedAtMillis = clock(), detail = null)
             }
         }
     }
@@ -110,41 +81,27 @@ class ConnectionProgressTracker(private val clock: () -> Long = System::currentT
         }
     }
 
-    fun succeed() = finish(ConnectionOutcome.Succeeded)
+    fun succeed() = record(ConnectionOutcome.Succeeded)
 
-    fun cancel() = finish(ConnectionOutcome.Cancelled)
-
-    fun timeOut(stage: ConnectionStage, budgetMillis: Long) = finish(ConnectionOutcome.TimedOut(stage, budgetMillis))
-
-    fun fail(stage: ConnectionStage, message: String?) = finish(ConnectionOutcome.Failed(stage, message))
-
-    /** Drop all progress state, hiding any overlay. */
-    fun clear() {
-        _progress.value = null
-    }
+    fun fail(stage: ConnectionStage, message: String?) = record(ConnectionOutcome.Failed(stage, message))
 
     /**
-     * Outcomes are sticky: the first to land is the one the user is shown.
+     * Settle the attempt on [outcome].
      *
-     * With one exception. A failure carrying no message can be replaced by one that
-     * can explain itself, because the order these arrive in is not the order of
-     * usefulness — teardown frequently reports first and has nothing to say, while
-     * the transport that actually knows the cause reports moments later. Without
-     * this the card would settle on a bare "Connection failed" whenever teardown
-     * won the race.
+     * Outcomes are sticky: the first to land is the one the user is shown. With one
+     * exception — a failure carrying no message yields to one that can explain
+     * itself, because the order these arrive in is not the order of usefulness.
+     * Teardown frequently reports first and has nothing to say, while the transport
+     * that actually knows the cause reports moments later; without this the card
+     * would settle on a bare "Connection failed" whenever teardown won the race.
      */
-    private fun finish(outcome: ConnectionOutcome) {
+    fun record(outcome: ConnectionOutcome) {
         _progress.update { current ->
             val existing = current?.outcome
-            when {
-                current == null -> current
-
-                existing == null -> current.copy(outcome = outcome, waitingOnUser = false)
-
-                !existing.explainsItself() && outcome.explainsItself() ->
-                    current.copy(outcome = outcome, waitingOnUser = false)
-
-                else -> current
+            if (current == null || (existing != null && (existing.explainsItself() || !outcome.explainsItself()))) {
+                current
+            } else {
+                current.copy(outcome = outcome, waitingOnUser = false)
             }
         }
     }

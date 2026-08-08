@@ -42,7 +42,6 @@ class ConnectionWatchdogTest {
         outcome: ConnectionOutcome? = null,
     ) = ConnectionProgress(
         stage = stage,
-        startedAtMillis = 0L,
         stageStartedAtMillis = 0L,
         waitingOnUser = waitingOnUser,
         outcome = outcome,
@@ -147,6 +146,30 @@ class ConnectionWatchdogTest {
         runCurrent()
 
         assertTrue(fired.isEmpty())
+        job.cancel()
+    }
+
+    // The connect log mirrors every line it prints into the progress detail, so a
+    // chatty stage emits constantly. If those emissions re-armed the watchdog the
+    // deadline would never be reached and the stage could hang indefinitely.
+
+    @Test
+    fun detailChangesDoNotRestartTheClock() = runTest {
+        val progress = MutableStateFlow<ConnectionProgress?>(snapshot(ConnectionStage.HANDSHAKING))
+        val fired = mutableListOf<ConnectionStage>()
+
+        val job = launch { watchConnection(progress, timeouts) { s, _ -> fired += s } }
+
+        repeat(20) { i ->
+            advanceTimeBy(1_000)
+            runCurrent()
+            progress.value = snapshot(ConnectionStage.HANDSHAKING).copy(detail = "log line $i")
+        }
+
+        advanceTimeBy(10_001)
+        runCurrent()
+
+        assertEquals(listOf(ConnectionStage.HANDSHAKING), fired)
         job.cancel()
     }
 

@@ -69,7 +69,6 @@ class ConnectionProgressOverlayTest {
         outcome: ConnectionOutcome? = null,
     ) = ConnectionProgress(
         stage = stage,
-        startedAtMillis = 0L,
         stageStartedAtMillis = 0L,
         detail = detail,
         waitingOnUser = waitingOnUser,

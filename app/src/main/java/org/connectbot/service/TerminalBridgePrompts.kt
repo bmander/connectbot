@@ -38,10 +38,10 @@ import timber.log.Timber
  * The `finally` matters as much as the call — a prompt that threw while leaving the
  * flag set would disarm the watchdog for the remainder of the attempt.
  */
-private fun <T> TerminalBridge.whileWaitingOnUser(block: () -> T): T {
+private fun <T> TerminalBridge.whileWaitingOnUser(block: suspend () -> T): T {
     reportConnectionWaitingOnUser(true)
     return try {
-        block()
+        runBlocking { block() }
     } finally {
         reportConnectionWaitingOnUser(false)
     }
@@ -61,9 +61,7 @@ fun TerminalBridge.requestBooleanPrompt(
 ): Boolean? {
     return try {
         whileWaitingOnUser {
-            runBlocking {
-                promptManager.requestBooleanPrompt(instructions, message)
-            }
+            promptManager.requestBooleanPrompt(instructions, message)
         }
     } catch (e: CancellationException) {
         // Prompt was cancelled due to connection loss
@@ -88,9 +86,7 @@ fun TerminalBridge.requestStringPrompt(
 ): String? {
     return try {
         whileWaitingOnUser {
-            runBlocking {
-                promptManager.requestStringPrompt(instructions, hint, isPassword)
-            }
+            promptManager.requestStringPrompt(instructions, hint, isPassword)
         }
     } catch (e: CancellationException) {
         // Prompt was cancelled due to connection loss - throw IOException to propagate error
@@ -112,9 +108,7 @@ fun TerminalBridge.requestBiometricAuth(
 ): Boolean {
     return try {
         whileWaitingOnUser {
-            runBlocking {
-                promptManager.requestBiometricAuth(keyNickname, keystoreAlias)
-            }
+            promptManager.requestBiometricAuth(keyNickname, keystoreAlias)
         }
     } catch (e: CancellationException) {
         // Prompt was cancelled due to connection loss - throw IOException to propagate error
@@ -148,18 +142,16 @@ fun TerminalBridge.requestHostKeyFingerprintPrompt(
 ): Boolean? {
     return try {
         whileWaitingOnUser {
-            runBlocking {
-                promptManager.requestHostKeyFingerprintPrompt(
-                    hostname,
-                    keyType,
-                    keySize,
-                    serverHostKey,
-                    randomArt,
-                    bubblebabble,
-                    sha256,
-                    md5,
-                )
-            }
+            promptManager.requestHostKeyFingerprintPrompt(
+                hostname,
+                keyType,
+                keySize,
+                serverHostKey,
+                randomArt,
+                bubblebabble,
+                sha256,
+                md5,
+            )
         }
     } catch (e: CancellationException) {
         // Prompt was cancelled due to connection loss - throw IOException to propagate error
