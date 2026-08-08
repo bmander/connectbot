@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -537,11 +538,8 @@ private fun HostListItem(
     // Determine border color based on connection state
     val borderColor = when (connectionState) {
         ConnectionState.CONNECTED -> colorResource(R.color.host_green)
-
-        // Green
+        ConnectionState.CONNECTING -> colorResource(R.color.host_amber)
         ConnectionState.DISCONNECTED -> colorResource(R.color.host_red)
-
-        // Red
         ConnectionState.UNKNOWN -> Color.Transparent
     }
 
@@ -583,6 +581,7 @@ private fun HostListItem(
                             },
                             contentDescription = when (connectionState) {
                                 ConnectionState.CONNECTED -> stringResource(R.string.image_description_connected)
+                                ConnectionState.CONNECTING -> stringResource(R.string.image_description_connecting)
                                 ConnectionState.DISCONNECTED -> stringResource(R.string.image_description_disconnected)
                                 ConnectionState.UNKNOWN -> null
                             },
@@ -605,12 +604,14 @@ private fun HostListItem(
                             Icon(
                                 imageVector = when (connectionState) {
                                     ConnectionState.CONNECTED -> Icons.Default.CheckCircle
+                                    ConnectionState.CONNECTING -> Icons.Default.Sync
                                     ConnectionState.DISCONNECTED -> Icons.Default.Error
                                     ConnectionState.UNKNOWN -> Icons.Default.Computer // Unreachable
                                 },
                                 contentDescription = null,
                                 tint = when (connectionState) {
                                     ConnectionState.CONNECTED -> colorResource(R.color.host_green)
+                                    ConnectionState.CONNECTING -> colorResource(R.color.host_amber)
                                     ConnectionState.DISCONNECTED -> colorResource(R.color.host_red)
                                     ConnectionState.UNKNOWN -> Color.Gray // Unreachable
                                 },
@@ -681,7 +682,8 @@ private fun HostListItem(
                                     showMenu = false
                                     showDisconnectDialog = true
                                 },
-                                enabled = connectionState == ConnectionState.CONNECTED,
+                                enabled = connectionState == ConnectionState.CONNECTED ||
+                                    connectionState == ConnectionState.CONNECTING,
                                 leadingIcon = {
                                     Icon(Icons.Default.LinkOff, null)
                                 },

@@ -49,6 +49,8 @@ import org.connectbot.data.entity.Host
 import org.connectbot.data.entity.KeyStorageType
 import org.connectbot.data.entity.PortForward
 import org.connectbot.data.entity.Pubkey
+import org.connectbot.service.ConnectionStage
+import org.connectbot.service.ConnectionTimeouts
 import org.connectbot.service.DisconnectReason
 import org.connectbot.service.TerminalBridge
 import org.connectbot.service.TerminalManager
@@ -100,6 +102,14 @@ class SSH :
 
     @Volatile
     private var sessionOpen = false
+
+    /** True while sshlib is inside its blocking connect(); see [close]. */
+    @Volatile
+    private var handshakeInFlight = false
+
+    /** Set when a close arrived that [close] had to defer. */
+    @Volatile
+    private var closeRequested = false
 
     private var pubkeysExhausted = false
     private var interactiveCanContinue = true
@@ -220,6 +230,11 @@ class SSH :
             serverHostKeyAlgorithm: String,
             serverHostKey: ByteArray,
         ): Boolean {
+            // sshlib calling in here proves the TCP connect and key exchange both
+            // succeeded, which is the only signal available from inside its single
+            // opaque connect() call.
+            bridge?.reportConnectionStage(ConnectionStage.VERIFYING_HOST_KEY)
+
             // Get known hosts for this specific host entry
             val hostId = verifyHost?.id ?: return false
             val knownHostsList = manager?.hostRepository?.getKnownHostsForHostBlocking(hostId) ?: emptyList()
@@ -398,6 +413,7 @@ class SSH :
             bridge?.dismissAuthBannersFrom(authBannerSourceName)
         }
 
+        bridge?.reportConnectionStage(ConnectionStage.AUTHENTICATING)
         bridge?.outputLine(manager?.res?.getString(R.string.terminal_auth))
 
         try {
@@ -672,6 +688,7 @@ class SSH :
      */
     private fun finishConnection() {
         authenticated = true
+        bridge?.reportConnectionStage(ConnectionStage.OPENING_SESSION)
 
         for (portForward in portForwards) {
             try {
@@ -685,7 +702,7 @@ class SSH :
         val currentHost = host ?: return
         if (!currentHost.wantSession) {
             bridge?.outputLine(manager?.res?.getString(R.string.terminal_no_session))
-            bridge?.onConnected()
+            bridge?.onConnected(this)
             return
         }
 
@@ -705,7 +722,7 @@ class SSH :
 
             sessionOpen = true
 
-            bridge?.onConnected()
+            bridge?.onConnected(this)
         } catch (e1: IOException) {
             Timber.e(e1, "Problem while trying to create PTY in finishConnection()")
         }
@@ -720,6 +737,8 @@ class SSH :
      * @return The authenticated Connection, or null if connection/authentication failed
      */
     private fun connectToJumpHost(jumpHost: Host): Connection? {
+        preflightResolve(jumpHost.hostname)
+        bridge?.reportConnectionStage(ConnectionStage.HANDSHAKING)
         bridge?.outputLine(manager?.res?.getString(R.string.terminal_connecting_via_jump, jumpHost.nickname))
 
         val jc = Connection(jumpHost.hostname, jumpHost.port)
@@ -750,7 +769,13 @@ class SSH :
             }
 
             // Connect to jump host
-            jc.connect(HostKeyVerifier(jumpHost), parseIpVersion(jumpHost.ipVersion, jumpHost.hostname))
+            val jumpTimeout = handshakeTimeoutMillis()
+            jc.connect(
+                HostKeyVerifier(jumpHost),
+                jumpTimeout,
+                jumpTimeout,
+                parseIpVersion(jumpHost.ipVersion, jumpHost.hostname),
+            )
 
             // Track this connection for cleanup
             jumpConnections.add(jc)
@@ -894,6 +919,51 @@ class SSH :
         }
     }
 
+    /**
+     * Resolve [hostname] up front purely so that DNS is a bounded, reportable step.
+     *
+     * sshlib resolves the name itself and takes no timeout for doing so, which left
+     * name resolution as the one part of connecting that could still hang forever
+     * after the connect and kex timeouts were added. Probing here gives the watchdog
+     * something to time out and lets a bad hostname be reported as such.
+     *
+     * The addresses are reported but not used for connecting: sshlib is still handed
+     * the hostname, not an address, because resolving to a literal would break host
+     * key matching (the verifier derives its match name from whatever it is given)
+     * and would forfeit sshlib's dual-stack Happy Eyeballs racing. The repeat lookup
+     * is served from the platform DNS cache.
+     *
+     * @return the addresses found, formatted for display, or [hostname] itself when
+     *   it is already a literal.
+     */
+    private fun preflightResolve(hostname: String): String {
+        if (HostConstants.isIpAddress(hostname)) return hostname
+
+        bridge?.reportConnectionStage(ConnectionStage.RESOLVING)
+        val addresses = InetAddress.getAllByName(hostname)
+            .joinToString(", ") { it.hostAddress ?: it.toString() }
+
+        // Worth saying out loud. Which address a name resolved to is the difference
+        // between "wrong host" and "right host, no route" — and on a split-DNS setup
+        // such as a VPN it is the only way to see whether the tunnel's resolver
+        // answered at all.
+        bridge?.outputLine(manager?.res?.getString(R.string.terminal_resolved, hostname, addresses))
+        return addresses
+    }
+
+    /**
+     * Milliseconds sshlib may spend on the TCP connect and on key exchange.
+     *
+     * Zero is sshlib's "wait forever", which is exactly what the user's "Never time
+     * out" choice means, so the mapping from an absent budget is direct. Without
+     * this, sshlib's default is that same unbounded wait, which is what let a
+     * blackholed host hang behind a single "Connecting to..." line.
+     */
+    private fun handshakeTimeoutMillis(): Int {
+        val timeouts = manager?.getConnectionTimeouts() ?: ConnectionTimeouts.DEFAULT
+        return timeouts.handshake?.toInt() ?: 0
+    }
+
     override fun connect() {
         val currentHost = host ?: return
 
@@ -915,6 +985,15 @@ class SSH :
             }
         }
 
+        val resolved = if (directJumpConnection == null) {
+            preflightResolve(currentHost.hostname)
+        } else {
+            // The bastion resolves the target — JumpHostProxyData forwards the
+            // hostname, never an address — so looking it up locally is wasted work,
+            // and fails outright when the name only exists in the bastion's DNS view.
+            currentHost.hostname
+        }
+
         connection = Connection(currentHost.hostname, currentHost.port)
         connection?.addConnectionMonitor(this)
         connection?.let { registerUserAuthBanner(it, currentHost.authBannerSourceName()) }
@@ -931,10 +1010,38 @@ class SSH :
         }
 
         try {
-            val connectionInfo = connection?.connect(
-                HostKeyVerifier(),
-                parseIpVersion(currentHost.ipVersion, currentHost.hostname),
-            ) ?: throw IOException("Connection failed")
+            bridge?.reportConnectionStage(ConnectionStage.HANDSHAKING)
+            // Entering the stage drops the previous detail and nothing else is
+            // logged until connect() returns, so without this the card would show a
+            // blank line for the whole handshake — which is exactly the stretch a
+            // stalled connection sits in.
+            bridge?.outputLine(
+                manager?.res?.getString(
+                    R.string.terminal_contacting,
+                    resolved,
+                    currentHost.port,
+                ),
+            )
+            handshakeInFlight = true
+            val connectionInfo = try {
+                val timeout = handshakeTimeoutMillis()
+                connection?.connect(
+                    HostKeyVerifier(),
+                    timeout,
+                    timeout,
+                    parseIpVersion(currentHost.ipVersion, currentHost.hostname),
+                ) ?: throw IOException("Connection failed")
+            } finally {
+                handshakeInFlight = false
+            }
+
+            // A close that arrived mid-handshake was deferred rather than blocking on
+            // sshlib's monitor; now that the monitor is free, honour it.
+            if (closeRequested) {
+                close()
+                onDisconnect()
+                return
+            }
             connected = true
 
             bridge?.outputLine(
@@ -973,9 +1080,15 @@ class SSH :
 
             // Display the reason in the text.
             var t: Throwable? = e
+            var rootMessage: String? = null
             while (t != null) {
                 val message = t.message
                 if (message != null) {
+                    // Keep overwriting, so this ends up holding the deepest message
+                    // in the chain. sshlib's outer wrappers say only "There was a
+                    // problem while connecting"; the useful text — connection
+                    // refused, no route to host — is at the bottom.
+                    rootMessage = message
                     bridge?.outputLine(message)
                     if (t is NoRouteToHostException) {
                         bridge?.outputLine(manager?.res?.getString(R.string.terminal_no_route))
@@ -983,6 +1096,11 @@ class SSH :
                 }
                 t = t.cause
             }
+
+            // This catch does not rethrow, so the bridge's own handler never sees
+            // the exception and teardown would otherwise record a failure with
+            // nothing to say. The full chain stays in the log above.
+            bridge?.reportConnectionFailure(rootMessage)
 
             close()
             onDisconnect()
@@ -992,7 +1110,7 @@ class SSH :
         try {
             // enter a loop to keep trying until authentication
             var tries = 0
-            while (connected && connection?.isAuthenticationComplete != true && tries++ < AUTH_TRIES) {
+            while (connected && !closeRequested && connection?.isAuthenticationComplete != true && tries++ < AUTH_TRIES) {
                 authenticate()
 
                 // sleep to make sure we dont kill system
@@ -1007,6 +1125,18 @@ class SSH :
         // Don't close during grace period - wait for network restore
         if (bridge?.isInGracePeriod() == true) {
             Timber.d("Deferring SSH close - bridge in network grace period")
+            return
+        }
+
+        // Connection.connect() and Connection.close() are synchronized on the same
+        // monitor, so closing while the handshake is still running would block until
+        // it finished rather than interrupting it — parking an IO dispatcher thread
+        // for the length of the timeout, and enough wedged hosts would starve the
+        // pool. Record the intent instead; connect() honours it on its way out.
+        if (handshakeInFlight) {
+            Timber.d("Deferring SSH close - handshake still in flight")
+            closeRequested = true
+            connected = false
             return
         }
 
@@ -1105,6 +1235,17 @@ class SSH :
 
         // Unexpected disconnect - normal flow
         Timber.d("SSH connection lost outside grace period - disconnecting")
+
+        // sshlib notifies its monitors before connect() throws back to us, and the
+        // reason it hands over mid-handshake is a generic wrapper — "There was a
+        // problem during connect." Reporting that would win the race against the
+        // catch block in connect(), which has the actual cause, so during a
+        // handshake stay quiet and let it speak. Outside one this is the only
+        // reporter there is.
+        if (!handshakeInFlight) {
+            bridge?.reportConnectionFailure(reason.message)
+        }
+
         onDisconnect()
     }
 

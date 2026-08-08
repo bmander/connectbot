@@ -50,8 +50,13 @@ abstract class AbsTransport {
 
     /**
      * Causes transport to connect to the target host. After connecting but before a
-     * session is started, must call back to [TerminalBridge.onConnected].
+     * session is started, must call back to [TerminalBridge.onConnected] passing
+     * itself, which is how the bridge tells a live attempt from one that was
+     * abandoned while its blocking handshake was still running.
      * After that call a session may be opened.
+     *
+     * Implementations may report progress as they go by calling
+     * [TerminalBridge.reportConnectionStage]; doing so is optional.
      */
     abstract fun connect()
 

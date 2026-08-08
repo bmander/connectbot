@@ -1,6 +1,6 @@
 /*
  * ConnectBot: simple, powerful, open-source SSH client for Android
- * Copyright 2025 Kenny Root
+ * Copyright 2025-2026 Kenny Root
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -374,6 +374,19 @@ class TerminalManager :
         } catch (_: Exception) {
         }
         return scrollback
+    }
+
+    /** Per-stage connection budgets derived from the user's timeout preference. */
+    fun getConnectionTimeouts(): ConnectionTimeouts {
+        val seconds = try {
+            prefs.getString(
+                PreferenceConstants.CONNECT_TIMEOUT,
+                PreferenceConstants.DEFAULT_CONNECT_TIMEOUT,
+            )?.toLong() ?: return ConnectionTimeouts.DEFAULT
+        } catch (_: NumberFormatException) {
+            return ConnectionTimeouts.DEFAULT
+        }
+        return ConnectionTimeouts.fromBaseMillis(seconds * 1000L)
     }
 
     /**

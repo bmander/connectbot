@@ -258,6 +258,7 @@ class SettingsScreenTest {
         onWifilockChange: (Boolean) -> Unit = {},
         onBackupkeysChange: (Boolean) -> Unit = {},
         onScrollbackChange: (String) -> Unit = {},
+        onConnectTimeoutChange: (String) -> Unit = {},
         onAddCustomTerminalType: (String) -> Unit = {},
         onRemoveCustomTerminalType: (String) -> Unit = {},
         onDefaultProfileChange: (Long) -> Unit = {},
@@ -273,6 +274,7 @@ class SettingsScreenTest {
                     onWifilockChange = onWifilockChange,
                     onBackupkeysChange = onBackupkeysChange,
                     onScrollbackChange = onScrollbackChange,
+                    onConnectTimeoutChange = onConnectTimeoutChange,
                     onAddCustomTerminalType = onAddCustomTerminalType,
                     onRemoveCustomTerminalType = onRemoveCustomTerminalType,
                     onFontFamilyChange = {},
@@ -303,6 +305,8 @@ class SettingsScreenTest {
                     onBellVolumeChange = {},
                     onBellVibrateChange = {},
                     onBellNotificationChange = {},
+                    onSwipeLeftKeysChange = {},
+                    onSwipeRightKeysChange = {},
                 )
             }
         }

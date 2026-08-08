@@ -78,15 +78,16 @@ class TerminalKeyListener(
     private val _modifierState = MutableStateFlow(getModifierState())
     val modifierState: StateFlow<ModifierState> = _modifierState.asStateFlow()
 
-    fun sendEscape() {
-        keyDispatcher.dispatchKey(0, VTermKey.ESCAPE)
-        clearTransients()
-    }
+    fun sendEscape() = sendPressedKey(VTermKey.ESCAPE)
 
-    fun sendTab() {
-        keyDispatcher.dispatchKey(0, VTermKey.TAB)
-        clearTransients()
-    }
+    /**
+     * Send Tab, carrying any active modifiers.
+     *
+     * Shift+Tab in particular is how most full-screen programs cycle backwards
+     * through fields or panes, and there is no other way to produce it from the
+     * on-screen keyboard.
+     */
+    fun sendTab() = sendPressedKey(VTermKey.TAB)
 
     fun sendPressedKey(key: Int) {
         keyDispatcher.dispatchKey(modifiersForTerminal, key)

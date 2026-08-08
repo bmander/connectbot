@@ -74,6 +74,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -128,6 +129,7 @@ import kotlinx.coroutines.launch
 import org.connectbot.R
 import org.connectbot.data.entity.Host
 import org.connectbot.service.AuthBanner
+import org.connectbot.service.ConnectionOutcome
 import org.connectbot.service.DisconnectReason
 import org.connectbot.service.PromptRequest
 import org.connectbot.service.TerminalBridge
@@ -137,6 +139,7 @@ import org.connectbot.terminal.Terminal
 import org.connectbot.ui.LoadingScreen
 import org.connectbot.ui.LocalTerminalManager
 import org.connectbot.ui.components.AuthBannerDialog
+import org.connectbot.ui.components.ConnectionProgressOverlay
 import org.connectbot.ui.components.FloatingTextInputDialog
 import org.connectbot.ui.components.InlinePrompt
 import org.connectbot.ui.components.ResizeDialog
@@ -145,8 +148,10 @@ import org.connectbot.ui.components.TerminalKeyboard
 import org.connectbot.ui.components.UrlScanDialog
 import org.connectbot.ui.theme.terminal
 import org.connectbot.util.PreferenceConstants
+import org.connectbot.util.SwipeKeySequenceParser
 import org.connectbot.util.UrlUtils
 import org.connectbot.util.rememberTerminalTypefaceResultFromStoredValue
+import org.connectbot.util.swipeKeyGesture
 import timber.log.Timber
 import kotlin.math.abs
 import kotlin.math.max
@@ -360,6 +365,7 @@ private fun ConsoleTerminalPage(
     onPasteRequest: () -> Unit,
     onInterceptKey: (KeyEvent) -> Boolean,
     onReconnect: () -> Unit,
+    onCancelConnection: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
     terminalModifier: Modifier = Modifier,
@@ -458,8 +464,32 @@ private fun ConsoleTerminalPage(
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
 
+            // Sits above the terminal, which keeps streaming its own connect log
+            // underneath. Yields entirely while a prompt is up so InlinePrompt owns
+            // the screen; the stage list comes back once the prompt is answered.
+            val connectionProgress by bridge.connectionProgress.collectAsState()
+            val visibleConnectionProgress = connectionProgress.takeIf { promptState == null }
+
+            // A failed attempt keeps the card up carrying its own Close/Retry, so the
+            // reconnect sheet would be a second copy of the same two actions. Note a
+            // succeeded attempt leaves a non-null snapshot behind forever, so this
+            // has to test the outcome rather than merely null-checking the progress —
+            // otherwise a session that connected and later dropped would never get
+            // the reconnect sheet at all.
+            val connectionCardVisible = visibleConnectionProgress != null &&
+                visibleConnectionProgress.outcome !is ConnectionOutcome.Succeeded
+
+            ConnectionProgressOverlay(
+                progress = visibleConnectionProgress,
+                onCancel = onCancelConnection,
+                onRetry = onReconnect,
+                onClose = onDisconnectRequest,
+                modifier = Modifier.align(Alignment.Center),
+            )
+
             AnimatedVisibility(
-                visible = bridge.isDisconnected && !bridge.isConnecting && promptState == null,
+                visible = bridge.isDisconnected && !bridge.isConnecting && promptState == null &&
+                    !connectionCardVisible,
                 enter = slideInVertically(initialOffsetY = { it }),
                 exit = slideOutVertically(targetOffsetY = { it }),
                 modifier = Modifier.align(Alignment.BottomCenter),
@@ -532,6 +562,14 @@ fun ConsoleScreen(
     var titleBarHide by remember { mutableStateOf(prefs.getBoolean(PreferenceConstants.TITLEBARHIDE, false)) }
     val volumeKeysChangeFontSize = remember { prefs.getBoolean(PreferenceConstants.VOLUME_FONT, true) }
     val keepScreenAwake = remember { prefs.getBoolean(PreferenceConstants.KEEP_ALIVE, true) }
+    val swipeLeftRaw = remember {
+        prefs.getString(PreferenceConstants.SWIPE_LEFT_KEYS, "") ?: ""
+    }
+    val swipeRightRaw = remember {
+        prefs.getString(PreferenceConstants.SWIPE_RIGHT_KEYS, "") ?: ""
+    }
+    val swipeLeftParsed = remember(swipeLeftRaw) { SwipeKeySequenceParser.parse(swipeLeftRaw) }
+    val swipeRightParsed = remember(swipeRightRaw) { SwipeKeySequenceParser.parse(swipeRightRaw) }
 
     // Keyboard state
     val hasHardwareKeyboard = rememberHasHardwareKeyboard()
@@ -556,6 +594,7 @@ fun ConsoleScreen(
 
     var forceSize: Pair<Int, Int>? by remember { mutableStateOf(null) }
 
+    var swipeOverlayLabel by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var showUrlScanDialog by remember { mutableStateOf(false) }
     var showResizeDialog by remember { mutableStateOf(false) }
@@ -926,7 +965,7 @@ fun ConsoleScreen(
                             .weight(1f),
                     ) {
                         val bridge = uiState.bridges[uiState.currentBridgeIndex]
-                        val terminalModifier = if (swipeBetweenSessions) {
+                        val sessionSwipeModifier = if (swipeBetweenSessions) {
                             Modifier.sessionSwipeNavigation(
                                 currentIndex = uiState.currentBridgeIndex,
                                 sessionCount = uiState.bridges.size,
@@ -937,6 +976,19 @@ fun ConsoleScreen(
                         } else {
                             Modifier
                         }
+                        // Session swipe navigation consumes horizontal drags during the
+                        // Initial pass, so it takes precedence when both are enabled.
+                        val terminalModifier = sessionSwipeModifier.swipeKeyGesture(
+                            leftKeys = swipeLeftParsed,
+                            rightKeys = swipeRightParsed,
+                            onSwipe = { keys ->
+                                bridge.injectString(keys)
+                                swipeOverlayLabel = when (keys) {
+                                    swipeLeftParsed -> swipeLeftRaw
+                                    else -> swipeRightRaw
+                                }
+                            },
+                        )
 
                         key(bridge.host.id) {
                             ConsoleTerminalPage(
@@ -965,11 +1017,19 @@ fun ConsoleScreen(
                                 onPasteRequest = ::pasteClipboardContents,
                                 onInterceptKey = handleShortcut,
                                 onReconnect = { viewModel.reconnect(bridge) },
+                                onCancelConnection = { viewModel.cancelConnection(bridge) },
                                 snackbarHostState = snackbarHostState,
                                 modifier = Modifier.fillMaxSize(),
                                 terminalModifier = terminalModifier,
                             )
                         }
+
+                        // Swipe gesture key sequence overlay
+                        SwipeKeyOverlay(
+                            label = swipeOverlayLabel,
+                            onDismiss = { swipeOverlayLabel = null },
+                            modifier = Modifier.align(Alignment.Center),
+                        )
                     }
                 }
             }
@@ -1300,6 +1360,41 @@ fun ConsoleScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SwipeKeyOverlay(
+    label: String?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    LaunchedEffect(label) {
+        if (label != null) {
+            delay(800)
+            currentOnDismiss()
+        }
+    }
+
+    AnimatedVisibility(
+        visible = label != null,
+        enter = fadeIn(animationSpec = tween(durationMillis = 100)),
+        exit = fadeOut(animationSpec = tween(durationMillis = 300)),
+        modifier = modifier,
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.85f),
+            tonalElevation = 4.dp,
+        ) {
+            Text(
+                text = label ?: "",
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+            )
         }
     }
 }

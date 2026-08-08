@@ -173,6 +173,7 @@ fun SettingsScreen(
         onWifilockChange = viewModel::updateWifilock,
         onBackupkeysChange = viewModel::updateBackupkeys,
         onScrollbackChange = viewModel::updateScrollback,
+        onConnectTimeoutChange = viewModel::updateConnectTimeout,
         onAddCustomTerminalType = viewModel::addCustomTerminalType,
         onRemoveCustomTerminalType = viewModel::removeCustomTerminalType,
         onFontFamilyChange = viewModel::updateFontFamily,
@@ -203,6 +204,8 @@ fun SettingsScreen(
         onBellVolumeChange = viewModel::updateBellVolume,
         onBellVibrateChange = viewModel::updateBellVibrate,
         onBellNotificationChange = viewModel::updateBellNotification,
+        onSwipeLeftKeysChange = viewModel::updateSwipeLeftKeys,
+        onSwipeRightKeysChange = viewModel::updateSwipeRightKeys,
         modifier = modifier,
     )
 }
@@ -218,6 +221,7 @@ fun SettingsScreenContent(
     onWifilockChange: (Boolean) -> Unit,
     onBackupkeysChange: (Boolean) -> Unit,
     onScrollbackChange: (String) -> Unit,
+    onConnectTimeoutChange: (String) -> Unit,
     onAddCustomTerminalType: (String) -> Unit,
     onRemoveCustomTerminalType: (String) -> Unit,
     onFontFamilyChange: (String) -> Unit,
@@ -248,6 +252,8 @@ fun SettingsScreenContent(
     onBellVolumeChange: (Float) -> Unit,
     onBellVibrateChange: (Boolean) -> Unit,
     onBellNotificationChange: (Boolean) -> Unit,
+    onSwipeLeftKeysChange: (String) -> Unit,
+    onSwipeRightKeysChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     highlightItem: String? = null,
 ) {
@@ -540,6 +546,41 @@ fun SettingsScreenContent(
                 )
             }
 
+            // Swipe gestures
+            item {
+                PreferenceCategory(title = stringResource(R.string.pref_swipe_gestures_category))
+            }
+
+            item {
+                val swipeKeyPresets = listOf(
+                    stringResource(R.string.swipe_keys_none) to "",
+                    "Ctrl+B P" to "Ctrl+B P",
+                    "Ctrl+B N" to "Ctrl+B N",
+                    "Ctrl+A P" to "Ctrl+A P",
+                    "Ctrl+A N" to "Ctrl+A N",
+                )
+                val swipeCustomLabel = stringResource(R.string.swipe_keys_custom)
+                val swipeNoneLabel = stringResource(R.string.swipe_keys_none)
+
+                ListPreferenceWithCustom(
+                    title = stringResource(R.string.pref_swipe_left_keys_title),
+                    summary = uiState.swipeLeftKeys.ifEmpty { swipeNoneLabel },
+                    value = uiState.swipeLeftKeys,
+                    entries = swipeKeyPresets,
+                    onValueChange = onSwipeLeftKeysChange,
+                    customLabel = swipeCustomLabel,
+                )
+
+                ListPreferenceWithCustom(
+                    title = stringResource(R.string.pref_swipe_right_keys_title),
+                    summary = uiState.swipeRightKeys.ifEmpty { swipeNoneLabel },
+                    value = uiState.swipeRightKeys,
+                    entries = swipeKeyPresets,
+                    onValueChange = onSwipeRightKeysChange,
+                    customLabel = swipeCustomLabel,
+                )
+            }
+
             item {
                 SwitchPreference(
                     title = stringResource(R.string.pref_volumefont_title),
@@ -555,6 +596,25 @@ fun SettingsScreenContent(
                     summary = stringResource(R.string.pref_keepalive_summary),
                     checked = uiState.keepalive,
                     onCheckedChange = onKeepAliveChange,
+                )
+            }
+
+            item {
+                val neverLabel = stringResource(R.string.pref_connect_timeout_never)
+                val timeoutEntries = listOf(
+                    stringResource(R.string.pref_connect_timeout_seconds, 15) to "15",
+                    stringResource(R.string.pref_connect_timeout_seconds, 30) to "30",
+                    stringResource(R.string.pref_connect_timeout_seconds, 60) to "60",
+                    stringResource(R.string.pref_connect_timeout_seconds, 120) to "120",
+                    neverLabel to "0",
+                )
+                ListPreference(
+                    title = stringResource(R.string.pref_connect_timeout_title),
+                    summary = timeoutEntries.find { it.second == uiState.connectTimeout }?.first
+                        ?: stringResource(R.string.pref_connect_timeout_summary),
+                    value = uiState.connectTimeout,
+                    entries = timeoutEntries,
+                    onValueChange = onConnectTimeoutChange,
                 )
             }
 
@@ -1575,6 +1635,8 @@ private fun SettingsScreenPreview() {
                 fontValidationError = null,
                 fontImportInProgress = false,
                 fontImportError = null,
+                swipeLeftKeys = "Ctrl+B P",
+                swipeRightKeys = "Ctrl+B N",
             ),
             onNavigateBack = {},
             onAuthOnLaunchChange = {},
@@ -1583,6 +1645,7 @@ private fun SettingsScreenPreview() {
             onWifilockChange = {},
             onBackupkeysChange = {},
             onScrollbackChange = {},
+            onConnectTimeoutChange = {},
             onAddCustomTerminalType = {},
             onRemoveCustomTerminalType = {},
             onFontFamilyChange = {},
@@ -1613,6 +1676,8 @@ private fun SettingsScreenPreview() {
             onBellVolumeChange = {},
             onBellVibrateChange = {},
             onBellNotificationChange = {},
+            onSwipeLeftKeysChange = {},
+            onSwipeRightKeysChange = {},
         )
     }
 }

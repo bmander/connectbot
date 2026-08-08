@@ -28,6 +28,26 @@ import timber.log.Timber
  */
 
 /**
+ * Run [block] with connection stage timeouts suspended.
+ *
+ * Every prompt in this file goes through here, which is the point: a stage budget
+ * that kept counting while a human was being waited on would tear the connection
+ * down from under someone still typing their password. Putting the bracket here
+ * rather than at each transport call site means no transport can forget it.
+ *
+ * The `finally` matters as much as the call — a prompt that threw while leaving the
+ * flag set would disarm the watchdog for the remainder of the attempt.
+ */
+private fun <T> TerminalBridge.whileWaitingOnUser(block: suspend () -> T): T {
+    reportConnectionWaitingOnUser(true)
+    return try {
+        runBlocking { block() }
+    } finally {
+        reportConnectionWaitingOnUser(false)
+    }
+}
+
+/**
  * Request a boolean prompt (yes/no dialog).
  * This method updates both promptManager (for modern UI) and promptHelper (for backward compatibility).
  *
@@ -40,7 +60,7 @@ fun TerminalBridge.requestBooleanPrompt(
     message: String,
 ): Boolean? {
     return try {
-        runBlocking {
+        whileWaitingOnUser {
             promptManager.requestBooleanPrompt(instructions, message)
         }
     } catch (e: CancellationException) {
@@ -65,7 +85,7 @@ fun TerminalBridge.requestStringPrompt(
     isPassword: Boolean = false,
 ): String? {
     return try {
-        runBlocking {
+        whileWaitingOnUser {
             promptManager.requestStringPrompt(instructions, hint, isPassword)
         }
     } catch (e: CancellationException) {
@@ -87,7 +107,7 @@ fun TerminalBridge.requestBiometricAuth(
     keystoreAlias: String,
 ): Boolean {
     return try {
-        runBlocking {
+        whileWaitingOnUser {
             promptManager.requestBiometricAuth(keyNickname, keystoreAlias)
         }
     } catch (e: CancellationException) {
@@ -121,7 +141,7 @@ fun TerminalBridge.requestHostKeyFingerprintPrompt(
     md5: String,
 ): Boolean? {
     return try {
-        runBlocking {
+        whileWaitingOnUser {
             promptManager.requestHostKeyFingerprintPrompt(
                 hostname,
                 keyType,

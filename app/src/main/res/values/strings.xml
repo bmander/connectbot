@@ -305,6 +305,15 @@
 	<!-- Summary for the optional swipe-to-switch-sessions preference -->
 	<string name="pref_swipe_sessions_summary">Enable horizontal swiping to switch terminal sessions. Off by default for accessibility.</string>
 
+	<!-- Swipe gesture key mappings -->
+	<string name="pref_swipe_gestures_category">"Swipe gestures"</string>
+	<string name="pref_swipe_left_keys_title">"Swipe left"</string>
+	<string name="pref_swipe_left_keys_summary">"Key sequence to send on swipe left"</string>
+	<string name="pref_swipe_right_keys_title">"Swipe right"</string>
+	<string name="pref_swipe_right_keys_summary">"Key sequence to send on swipe right"</string>
+	<string name="swipe_keys_none">"None"</string>
+	<string name="swipe_keys_custom">"Custom\u2026"</string>
+
 	<!-- Name for the full screen preference -->
 	<string name="pref_fullscreen_title">"Full screen"</string>
 	<!-- Summary for the full screen preference -->
@@ -354,6 +363,47 @@
 	<string name="pref_keepalive_title">"Keep screen awake"</string>
 	<!-- Summary for the camera shortcut usage preference -->
 	<string name="pref_keepalive_summary">"Prevent the screen from turning off when working in a console"</string>
+
+	<!-- Shown once a hostname is resolved; %1$s is the hostname, %2$s the addresses -->
+	<string name="terminal_resolved">"Resolved %1$s to %2$s"</string>
+	<!-- Shown while opening the connection; %1$s is the address, %2$d the port -->
+	<string name="terminal_contacting">"Contacting %1$s port %2$d"</string>
+
+	<!-- Heading on the overlay shown while a connection is being established -->
+	<string name="connecting_overlay_title">"Connecting…"</string>
+	<!-- Connection step: looking up the hostname -->
+	<string name="connecting_stage_resolving">"Looking up host"</string>
+	<!-- Connection step: opening the connection and agreeing encryption -->
+	<string name="connecting_stage_handshaking">"Contacting server"</string>
+	<!-- Connection step: checking the server is the one we expect -->
+	<string name="connecting_stage_verifying_host_key">"Checking host key"</string>
+	<!-- Connection step: proving who we are -->
+	<string name="connecting_stage_authenticating">"Authenticating"</string>
+	<!-- Connection step: starting the shell -->
+	<string name="connecting_stage_opening_session">"Opening shell"</string>
+	<!-- Shown beside the current step once it has been running a while, %1$d is seconds -->
+	<string name="connecting_elapsed_seconds">"%1$ds"</string>
+	<!-- Shown when a step is waiting for the user to answer a prompt -->
+	<string name="connecting_waiting_for_you">"Waiting for you"</string>
+	<!-- Shown when a step ran out of time, %1$d is the number of seconds allowed -->
+	<string name="connecting_timed_out">"Timed out after %1$ds"</string>
+	<!-- Shown when the user cancelled the attempt -->
+	<string name="connecting_cancelled">"Cancelled"</string>
+	<!-- Content description for the control that expands a truncated error message -->
+	<string name="connecting_error_show_all">"Show the full error"</string>
+	<!-- Content description for the control that collapses an expanded error message -->
+	<string name="connecting_error_show_less">"Show less of the error"</string>
+	<!-- Shown when connecting failed for an unspecified reason -->
+	<string name="connecting_failed">"Connection failed"</string>
+
+	<!-- Name for the connection timeout preference -->
+	<string name="pref_connect_timeout_title">"Connection timeout"</string>
+	<!-- Summary for the connection timeout preference -->
+	<string name="pref_connect_timeout_summary">"How long to wait at each step of connecting before giving up"</string>
+	<!-- Connection timeout choice: no limit -->
+	<string name="pref_connect_timeout_never">"Never time out"</string>
+	<!-- Connection timeout choice, %1$d is a number of seconds -->
+	<string name="pref_connect_timeout_seconds">"%1$d seconds"</string>
 
 	<!-- Name for the Wi-Fi lock preference -->
 	<string name="pref_wifilock_title">"Keep Wi-Fi active"</string>
@@ -910,6 +960,7 @@
 	<!-- Accessibility text for connection state in list of hosts when the host is currently
 	 connected. -->
 	<string name="image_description_connected">"Connected."</string>
+	<string name="image_description_connecting">"Connecting."</string>
 
 	<!-- Accessibility text for connection state in list of hosts when the host is currently
 	     disconnected after having been previously connected. -->
@@ -918,6 +969,7 @@
 	<!-- Describes the icon of the "send control character" button in the terminal view for
 	     accessibility purposes. -->
 	<string name="image_description_toggle_control_character">Toggle control character.</string>
+	<string name="image_description_toggle_shift">Toggle shift.</string>
 
 	<!-- Describes the icon of the "send escape character" button in the terminal view for
 	     accessibility purposes. -->
@@ -955,6 +1007,7 @@
 	<string name="button_key_esc">Esc</string>
 	<!-- Text for the "Ctrl" button in virtual keyboard. -->
 	<string name="button_key_ctrl">Ctrl</string>
+	<string name="button_key_shift">Shift</string>
 
 	<!-- Text for the "Home" button in virtual keyboard. -->
 	<string name="button_key_home">Home</string>

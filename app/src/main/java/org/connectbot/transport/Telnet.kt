@@ -24,6 +24,8 @@ import androidx.core.net.toUri
 import de.mud.telnet.TelnetProtocolHandler
 import org.connectbot.R
 import org.connectbot.data.entity.Host
+import org.connectbot.service.ConnectionStage
+import org.connectbot.service.ConnectionTimeouts
 import org.connectbot.service.DisconnectReason
 import org.connectbot.service.TerminalBridge
 import org.connectbot.service.TerminalManager
@@ -125,7 +127,8 @@ class Telnet : AbsTransport {
             `is` = socket?.getInputStream()
             os = socket?.getOutputStream()
 
-            bridge?.onConnected()
+            bridge?.reportConnectionStage(ConnectionStage.OPENING_SESSION)
+            bridge?.onConnected(this)
         } catch (e: UnknownHostException) {
             Timber.d(e, "IO Exception connecting to host")
             throw e
@@ -133,6 +136,43 @@ class Telnet : AbsTransport {
             Timber.d(e, "IO Exception connecting to host")
             throw e
         }
+    }
+
+    /**
+     * Resolve [host] and connect [sock] to the first address that answers.
+     *
+     * An instance method rather than a companion one so it can report progress and
+     * read the timeout preference directly, instead of having both threaded in.
+     */
+    private fun tryAllAddresses(sock: Socket, host: String, port: Int, ipVersion: String) {
+        val timeouts = manager?.getConnectionTimeouts() ?: ConnectionTimeouts.DEFAULT
+
+        bridge?.reportConnectionStage(ConnectionStage.RESOLVING)
+        val allAddresses = InetAddress.getAllByName(host)
+        // Filter addresses based on IP version preference (unless hostname is a literal IP)
+        val addresses = if (HostConstants.isIpAddress(host)) {
+            allAddresses.toList()
+        } else {
+            when (ipVersion) {
+                HostConstants.IPVERSION_IPV4_ONLY -> allAddresses.filter { it is Inet4Address }
+                HostConstants.IPVERSION_IPV6_ONLY -> allAddresses.filter { it is Inet6Address }
+                else -> allAddresses.toList()
+            }
+        }
+
+        bridge?.reportConnectionStage(ConnectionStage.HANDSHAKING)
+        for (addr in addresses) {
+            try {
+                // Without an explicit timeout this blocks until the OS gives up, which
+                // makes the catch below (and the throw after the loop) dead code for a
+                // blackholed host. Zero is the JDK's "wait forever", which is exactly
+                // what the user's "Never time out" choice means.
+                sock.connect(InetSocketAddress(addr, port), timeouts.handshake?.toInt() ?: 0)
+                return
+            } catch (ignored: SocketTimeoutException) {
+            }
+        }
+        throw SocketTimeoutException("Could not connect; socket timed out")
     }
 
     override fun close() {
@@ -265,29 +305,6 @@ class Telnet : AbsTransport {
 
         @JvmStatic
         fun getProtocolName(): String = PROTOCOL
-
-        @JvmStatic
-        private fun tryAllAddresses(sock: Socket, host: String, port: Int, ipVersion: String) {
-            val allAddresses = InetAddress.getAllByName(host)
-            // Filter addresses based on IP version preference (unless hostname is a literal IP)
-            val addresses = if (HostConstants.isIpAddress(host)) {
-                allAddresses.toList()
-            } else {
-                when (ipVersion) {
-                    HostConstants.IPVERSION_IPV4_ONLY -> allAddresses.filter { it is Inet4Address }
-                    HostConstants.IPVERSION_IPV6_ONLY -> allAddresses.filter { it is Inet6Address }
-                    else -> allAddresses.toList()
-                }
-            }
-            for (addr in addresses) {
-                try {
-                    sock.connect(InetSocketAddress(addr, port))
-                    return
-                } catch (ignored: SocketTimeoutException) {
-                }
-            }
-            throw SocketTimeoutException("Could not connect; socket timed out")
-        }
 
         @JvmStatic
         fun getUri(input: String): Uri? {

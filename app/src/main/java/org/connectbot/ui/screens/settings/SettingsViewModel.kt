@@ -58,6 +58,7 @@ data class SettingsUiState(
     val wifilock: Boolean = true,
     val backupkeys: Boolean = false,
     val scrollback: String = "140",
+    val connectTimeout: String = PreferenceConstants.DEFAULT_CONNECT_TIMEOUT,
     val rotation: String = "Default",
     val titlebarhide: Boolean = false,
     val fullscreen: Boolean = false,
@@ -80,6 +81,8 @@ data class SettingsUiState(
     val customFonts: List<String> = emptyList(),
     val customTerminalTypes: List<String> = emptyList(),
     val localFonts: List<Pair<String, String>> = emptyList(),
+    val swipeLeftKeys: String = "",
+    val swipeRightKeys: String = "",
     val fontValidationInProgress: Boolean = false,
     val fontValidationError: String? = null,
     val fontImportInProgress: Boolean = false,
@@ -196,6 +199,10 @@ class SettingsViewModel @Inject constructor(
             wifilock = prefs.getBoolean("wifilock", true),
             backupkeys = prefs.getBoolean("backupkeys", false),
             scrollback = prefs.getString("scrollback", "140") ?: "140",
+            connectTimeout = prefs.getString(
+                PreferenceConstants.CONNECT_TIMEOUT,
+                PreferenceConstants.DEFAULT_CONNECT_TIMEOUT,
+            ) ?: PreferenceConstants.DEFAULT_CONNECT_TIMEOUT,
             rotation = prefs.getString("rotation", "Default") ?: "Default",
             titlebarhide = prefs.getBoolean("titlebarhide", false),
             fullscreen = prefs.getBoolean("fullscreen", false),
@@ -214,6 +221,8 @@ class SettingsViewModel @Inject constructor(
             bellVolume = prefs.getFloat("bellVolume", 0.5f),
             bellVibrate = prefs.getBoolean("bellVibrate", true),
             bellNotification = prefs.getBoolean("bellNotification", false),
+            swipeLeftKeys = prefs.getString(PreferenceConstants.SWIPE_LEFT_KEYS, "") ?: "",
+            swipeRightKeys = prefs.getString(PreferenceConstants.SWIPE_RIGHT_KEYS, "") ?: "",
             fontFamily = prefs.getString("fontFamily", "SYSTEM_DEFAULT") ?: "SYSTEM_DEFAULT",
             customFonts = customFonts,
             customTerminalTypes = customTerminalTypes,
@@ -345,6 +354,10 @@ class SettingsViewModel @Inject constructor(
         updateStringPref(PreferenceConstants.SCROLLBACK, value) { copy(scrollback = value) }
     }
 
+    fun updateConnectTimeout(value: String) {
+        updateStringPref(PreferenceConstants.CONNECT_TIMEOUT, value) { copy(connectTimeout = value) }
+    }
+
     fun updateStickyModifiers(value: String) {
         updateStringPref(PreferenceConstants.STICKY_MODIFIERS, value) { copy(stickymodifiers = value) }
     }
@@ -363,6 +376,14 @@ class SettingsViewModel @Inject constructor(
 
     fun updateThemeMode(mode: ThemeMode) {
         updateStringPref(PreferenceConstants.THEME_MODE, mode.name) { copy(themeMode = mode) }
+    }
+
+    fun updateSwipeLeftKeys(value: String) {
+        updateStringPref(PreferenceConstants.SWIPE_LEFT_KEYS, value) { copy(swipeLeftKeys = value) }
+    }
+
+    fun updateSwipeRightKeys(value: String) {
+        updateStringPref(PreferenceConstants.SWIPE_RIGHT_KEYS, value) { copy(swipeRightKeys = value) }
     }
 
     fun updateLanguage(languageTag: String) {

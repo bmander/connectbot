@@ -202,6 +202,23 @@ class TerminalBridge {
     private val _progressState = MutableStateFlow<ProgressInfo?>(null)
     val progressState: StateFlow<ProgressInfo?> = _progressState.asStateFlow()
 
+    private val connectionTracker = ConnectionProgressTracker()
+
+    /**
+     * Progress of the connection *handshake* — which phase of connecting we are in.
+     *
+     * Not to be confused with [progressState], which reports progress of whatever is
+     * running inside an already-established shell via OSC 9;4. The two are unrelated
+     * and can be active at different times.
+     */
+    val connectionProgress: StateFlow<ConnectionProgress?> = connectionTracker.progress
+
+    private var connectJob: Job? = null
+    private var watchdogJob: Job? = null
+
+    @Volatile
+    private var connectAbandoned = false
+
     var disconnected = false
         private set
     var connecting = false
@@ -485,6 +502,43 @@ class TerminalBridge {
     }
 
     /**
+     * Report which phase of connecting we have reached.
+     *
+     * Transports call this alongside the [outputLine] calls they already make, which
+     * supply the detail line beneath it. A transport that never calls it still works
+     * — the overlay just shows a single indeterminate stage — so instrumenting a
+     * transport is optional.
+     */
+    fun reportConnectionStage(stage: ConnectionStage) {
+        connectionTracker.enter(stage)
+    }
+
+    /**
+     * Record why the attempt failed, in the transport's own words.
+     *
+     * Worth calling even though teardown records a failure anyway: that fallback has
+     * no message to give and the card can only say "Connection failed", while the
+     * transport knows it was, say, a connect timeout or no route to host. Outcomes
+     * are sticky, so reporting here before tearing down is what puts the specific
+     * reason on the card instead of the generic one.
+     */
+    fun reportConnectionFailure(message: String?) {
+        connectionTracker.fail(
+            connectionProgress.value?.stage ?: ConnectionStage.HANDSHAKING,
+            message,
+        )
+    }
+
+    /**
+     * Bracket a wait on user input, so stage timeouts are suspended while a human is
+     * being waited on. Callers must pair this in a `finally`; leaving it set would
+     * disarm the watchdog for the rest of the attempt.
+     */
+    fun reportConnectionWaitingOnUser(waiting: Boolean) {
+        connectionTracker.setWaitingOnUser(waiting)
+    }
+
+    /**
      * Spawn thread to open connection and start login process.
      */
     fun startConnection() {
@@ -494,6 +548,25 @@ class TerminalBridge {
             return
         }
         connecting = true
+        connectAbandoned = false
+        // Clear the previous attempt's terminal state. Without this a retry inherits
+        // `disconnected`, and dispatchDisconnect's guard against double teardown
+        // would then swallow the *new* attempt's failure — leaving the bridge stuck
+        // reporting itself as connecting for good.
+        disconnected = false
+        disconnectReason = DisconnectReason.UNKNOWN
+        connectionTracker.begin()
+
+        // Bound each phase. sshlib's own connect and kex timeouts are the only thing
+        // that can kill an orphaned socket, but they cover neither DNS nor anything
+        // after the handshake, which is what this covers.
+        watchdogJob?.cancel()
+        watchdogJob = scope.launch {
+            watchConnection(connectionProgress, manager.getConnectionTimeouts()) { stage, budget ->
+                Timber.w("Connection to ${host.nickname} timed out during $stage after ${budget}ms")
+                abandonConnection(ConnectionOutcome.TimedOut(stage, budget))
+            }
+        }
 
         transport = newTransport
         newTransport.bridge = this
@@ -509,7 +582,7 @@ class TerminalBridge {
 
         outputLine(manager.res.getString(R.string.terminal_connecting, host.hostname, host.port, host.protocol))
 
-        scope.launch(dispatchers.io) {
+        connectJob = scope.launch(dispatchers.io) {
             try {
                 if (newTransport.canForwardPorts()) {
                     try {
@@ -530,6 +603,10 @@ class TerminalBridge {
                 newTransport.connect()
             } catch (e: Exception) {
                 Timber.e(e, "Connection failed for ${host.nickname}")
+                connectionTracker.fail(
+                    connectionProgress.value?.stage ?: ConnectionStage.HANDSHAKING,
+                    e.message,
+                )
                 manager.reportError(
                     ServiceError.ConnectionFailed(
                         hostNickname = host.nickname,
@@ -537,6 +614,13 @@ class TerminalBridge {
                         reason = e.message ?: "Connection failed",
                     ),
                 )
+            } finally {
+                // The handshake may have kept running past an abandon: cancelling this
+                // coroutine cannot interrupt a blocking socket call, so whatever it
+                // eventually produced has to be closed here rather than leaked.
+                if (connectAbandoned || transport !== newTransport) {
+                    runCatching { newTransport.close() }
+                }
             }
         }
     }
@@ -570,6 +654,8 @@ class TerminalBridge {
             )
         }
 
+        var lastMeaningfulLine: String? = null
+
         synchronized(localOutput) {
             for (line in output.split("\n".toRegex())) {
                 var processedLine = line
@@ -582,8 +668,20 @@ class TerminalBridge {
                 localOutput.add(s)
 
                 terminalEmulator.writeInput(s.encodeToByteArray())
+
+                if (processedLine.isNotBlank()) lastMeaningfulLine = processedLine.trim()
             }
         }
+
+        // Mirror the connect log into the progress card as the running stage's detail
+        // line. Doing it here rather than at each call site means everything the log
+        // says — negotiated ciphers, host key fingerprints, which key is being tried,
+        // server auth banners — reaches the card without transports having to report
+        // anything twice, and stays in step if new output is added later.
+        //
+        // The log remains the durable record: it survives into the session scrollback,
+        // whereas the card only ever shows the newest line and then goes away.
+        lastMeaningfulLine?.let { connectionTracker.detail(it) }
     }
 
     /**
@@ -639,9 +737,23 @@ class TerminalBridge {
      * Internal method to request actual PTY terminal once we've finished
      * authentication. If called before authenticated, it will just fail.
      */
-    fun onConnected() {
+    fun onConnected(caller: AbsTransport) {
+        // A blocking handshake cannot be interrupted, so an attempt the user
+        // abandoned may still succeed and call in here long afterwards. Letting it
+        // through would clear `disconnected`, start a Relay and notify about a bridge
+        // the manager has already dropped: a live session with nothing attached to
+        // it. Transport identity is attempt identity, since startConnection installs
+        // a fresh transport each time.
+        if (connectAbandoned || caller !== transport) {
+            Timber.i("Ignoring late connect for ${host.nickname}; the attempt was abandoned")
+            scope.launch(dispatchers.io) { runCatching { caller.close() } }
+            return
+        }
+
         disconnected = false
         connecting = false
+        watchdogJob?.cancel()
+        connectionTracker.succeed()
 
         // We no longer need our local output.
         localOutput.clear()
@@ -699,6 +811,39 @@ class TerminalBridge {
     }
 
     /**
+     * Give up on the in-flight connection attempt.
+     *
+     * Shared by the user pressing Cancel and by the stage watchdog firing. Order
+     * matters: the outcome is recorded before any teardown, so the overlay can say
+     * what happened rather than racing the disconnect path for the explanation.
+     *
+     * Cancelling [connectJob] only takes effect at a suspension point, and a
+     * blocking socket call is not one, so this cannot promise the underlying
+     * handshake stops immediately — that is what the transport timeouts bound. What
+     * it does promise is that the attempt is disowned right now: the user gets their
+     * screen back and nothing the abandoned attempt later produces is adopted.
+     */
+    fun abandonConnection(outcome: ConnectionOutcome) {
+        if (!connecting) return
+
+        connectAbandoned = true
+        connectionTracker.record(outcome)
+
+        watchdogJob?.cancel()
+        // Unblocks any prompt the attempt is parked on. The cancellation path there
+        // already returns null, and callers already treat a null answer as declined.
+        promptManager.cancelPrompt()
+        connectJob?.cancel()
+
+        val reason = if (outcome is ConnectionOutcome.Cancelled) {
+            DisconnectReason.USER_REQUESTED
+        } else {
+            DisconnectReason.IO_ERROR
+        }
+        dispatchDisconnect(reason)
+    }
+
+    /**
      * Force disconnection of this terminal bridge.
      *
      * [DisconnectReason.USER_REQUESTED] always takes the immediate-close path,
@@ -719,6 +864,15 @@ class TerminalBridge {
                 disconnectReason = reason
             }
         }
+
+        // Stop the stage watchdog and settle the progress overlay. Outcomes are
+        // sticky, so an explicit cancel or timeout recorded moments ago keeps its
+        // more specific wording rather than being overwritten here.
+        watchdogJob?.cancel()
+        connectionTracker.fail(
+            connectionProgress.value?.stage ?: ConnectionStage.HANDSHAKING,
+            null,
+        )
 
         // Cancel any pending prompts
         promptManager.cancelPrompt()

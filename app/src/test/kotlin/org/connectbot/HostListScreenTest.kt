@@ -18,6 +18,7 @@
 package org.connectbot
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -405,6 +406,43 @@ class HostListScreenTest {
         composeTestRule.onNodeWithText(composeTestRule.activity.getString(R.string.list_host_delete)).performClick()
         composeTestRule.onNodeWithText(composeTestRule.activity.getString(R.string.button_yes)).performClick()
         assertTrue(deletedHost == host)
+    }
+
+    @Test
+    fun hostListScreenContent_showsConnectingState() {
+        val host = testHost(id = 7L, nickname = "handshaking", protocol = "ssh", color = null)
+
+        setHostListContent(
+            uiState = HostListUiState(
+                hosts = listOf(host),
+                connectionStates = mapOf(host.id to ConnectionState.CONNECTING),
+            ),
+        )
+
+        composeTestRule
+            .onNodeWithContentDescription(
+                composeTestRule.activity.getString(R.string.image_description_connecting),
+            )
+            .assertIsDisplayed()
+    }
+
+    // A host stuck mid-handshake is exactly the one a user most wants to kill, so
+    // disconnect has to be reachable before the session is fully up.
+    @Test
+    fun hostListScreenContent_disconnectEnabledWhileConnecting() {
+        val host = testHost(id = 8L, nickname = "handshaking", protocol = "ssh", color = null)
+
+        setHostListContent(
+            uiState = HostListUiState(
+                hosts = listOf(host),
+                connectionStates = mapOf(host.id to ConnectionState.CONNECTING),
+            ),
+        )
+
+        openHostMenu(host)
+        composeTestRule
+            .onNodeWithText(composeTestRule.activity.getString(R.string.list_host_disconnect))
+            .assertIsEnabled()
     }
 
     @Test
