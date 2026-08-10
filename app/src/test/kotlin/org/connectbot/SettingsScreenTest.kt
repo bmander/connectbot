@@ -61,7 +61,7 @@ class SettingsScreenTest {
 
         composeTestRule.setContent {
             ConnectBotTheme {
-                SettingsScreen(onNavigateBack = {})
+                SettingsScreen(onNavigateBack = {}, onNavigateToMacros = {})
             }
         }
 
@@ -77,7 +77,7 @@ class SettingsScreenTest {
 
         composeTestRule.setContent {
             ConnectBotTheme {
-                SettingsScreen(onNavigateBack = { backCalled = true })
+                SettingsScreen(onNavigateBack = { backCalled = true }, onNavigateToMacros = {})
             }
         }
 
@@ -89,12 +89,33 @@ class SettingsScreenTest {
     }
 
     @Test
+    fun settingsScreen_macrosEntryNavigatesToMacroList() {
+        var macrosCalled = false
+        val macrosTitle = composeTestRule.activity.getString(R.string.pref_macros_title)
+
+        composeTestRule.setContent {
+            ConnectBotTheme {
+                SettingsScreen(onNavigateBack = {}, onNavigateToMacros = { macrosCalled = true })
+            }
+        }
+
+        composeTestRule
+            .onNode(hasScrollAction())
+            .performScrollToNode(hasText(macrosTitle))
+        composeTestRule
+            .onNodeWithText(macrosTitle)
+            .performClick()
+
+        assertTrue(macrosCalled)
+    }
+
+    @Test
     fun settingsScreen_displaysConnPersistPreference() {
         val connPersistTitle = composeTestRule.activity.getString(R.string.pref_conn_persist_title)
 
         composeTestRule.setContent {
             ConnectBotTheme {
-                SettingsScreen(onNavigateBack = {})
+                SettingsScreen(onNavigateBack = {}, onNavigateToMacros = {})
             }
         }
 
@@ -111,6 +132,7 @@ class SettingsScreenTest {
             ConnectBotTheme {
                 SettingsScreen(
                     onNavigateBack = {},
+                    onNavigateToMacros = {},
                     highlightItem = "conn_persist",
                 )
             }
@@ -267,6 +289,7 @@ class SettingsScreenTest {
                 SettingsScreenContent(
                     uiState = uiState,
                     onNavigateBack = {},
+                    onNavigateToMacros = {},
                     onAuthOnLaunchChange = onAuthOnLaunchChange,
                     onMemkeysChange = onMemkeysChange,
                     onConnPersistChange = onConnPersistChange,

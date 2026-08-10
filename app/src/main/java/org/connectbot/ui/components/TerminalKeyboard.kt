@@ -173,6 +173,8 @@ internal fun TerminalKeyboardContent(
     playAnimation: Boolean,
     bumpyArrows: Boolean,
     modifier: Modifier = Modifier,
+    // The macro recorder reuses this row but has no session to open a text dialog against.
+    showTextInputButton: Boolean = true,
 ) {
     val scrollState = rememberScrollState()
     val currentOnScrollInProgressChange by rememberUpdatedState(onScrollInProgressChange)
@@ -412,28 +414,30 @@ internal fun TerminalKeyboardContent(
             }
 
             // Text input button (always visible on right)
-            Surface(
-                onClick = {
-                    onOpenTextInput()
-                    onInteraction()
-                },
-                modifier = Modifier.size(
-                    width = TERMINAL_KEYBOARD_WIDTH_DP.dp,
-                    height = TERMINAL_KEYBOARD_HEIGHT_DP.dp,
-                ),
-                shape = RectangleShape,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = UI_OPACITY),
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxSize(),
+            if (showTextInputButton) {
+                Surface(
+                    onClick = {
+                        onOpenTextInput()
+                        onInteraction()
+                    },
+                    modifier = Modifier.size(
+                        width = TERMINAL_KEYBOARD_WIDTH_DP.dp,
+                        height = TERMINAL_KEYBOARD_HEIGHT_DP.dp,
+                    ),
+                    shape = RectangleShape,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = UI_OPACITY),
                 ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = stringResource(R.string.terminal_keyboard_text_input_button),
-                        modifier = Modifier.height(TERMINAL_KEYBOARD_CONTENT_SIZE_DP.dp),
-                    )
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = stringResource(R.string.terminal_keyboard_text_input_button),
+                            modifier = Modifier.height(TERMINAL_KEYBOARD_CONTENT_SIZE_DP.dp),
+                        )
+                    }
                 }
             }
 

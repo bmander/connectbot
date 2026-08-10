@@ -127,6 +127,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.connectbot.R
 import org.connectbot.data.entity.Host
+import org.connectbot.data.entity.MacroWithSteps
 import org.connectbot.service.AuthBanner
 import org.connectbot.service.DisconnectReason
 import org.connectbot.service.PromptRequest
@@ -139,6 +140,8 @@ import org.connectbot.ui.LocalTerminalManager
 import org.connectbot.ui.components.AuthBannerDialog
 import org.connectbot.ui.components.FloatingTextInputDialog
 import org.connectbot.ui.components.InlinePrompt
+import org.connectbot.ui.components.MACRO_ROW_HEIGHT_DP
+import org.connectbot.ui.components.MacroKeyRow
 import org.connectbot.ui.components.ResizeDialog
 import org.connectbot.ui.components.TERMINAL_KEYBOARD_HEIGHT_DP
 import org.connectbot.ui.components.TerminalKeyboard
@@ -347,6 +350,7 @@ private fun ConsoleTerminalPage(
     forceSize: Pair<Int, Int>?,
     termFocusRequester: FocusRequester,
     showExtraKeyboard: Boolean,
+    macros: List<MacroWithSteps>,
     hasPlayedKeyboardAnimation: Boolean,
     imeVisible: Boolean,
     handleTerminalInteraction: () -> Unit,
@@ -385,7 +389,15 @@ private fun ConsoleTerminalPage(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    bottom = if (keyboardAlwaysVisible) TERMINAL_KEYBOARD_HEIGHT_DP.dp else 0.dp,
+                    // Reserve room for whatever is pinned to the bottom. The macro row is
+                    // only composed when there are macros, so its height is only reserved
+                    // then.
+                    bottom = if (keyboardAlwaysVisible) {
+                        TERMINAL_KEYBOARD_HEIGHT_DP.dp +
+                            if (macros.isNotEmpty()) MACRO_ROW_HEIGHT_DP.dp else 0.dp
+                    } else {
+                        0.dp
+                    },
                 )
                 .then(terminalModifier)
                 .testTag("terminal"),
@@ -426,20 +438,32 @@ private fun ConsoleTerminalPage(
                     .align(Alignment.BottomCenter)
                     .testTag("terminal_keyboard"),
             ) {
-                TerminalKeyboard(
-                    bridge = bridge,
-                    onInteraction = { handleTerminalInteraction() },
-                    onHideIme = {
-                        onShowSoftwareKeyboardChange(false)
-                    },
-                    onShowIme = {
-                        onShowSoftwareKeyboardChange(true)
-                    },
-                    onOpenTextInput = onTextInputRequest,
-                    onScrollInProgressChange = onKeyboardScrollInProgressChange,
-                    imeVisible = imeVisible,
-                    playAnimation = !hasPlayedKeyboardAnimation,
-                )
+                // Both rows live inside the one AnimatedVisibility so the macro row shares
+                // the key row's show/auto-hide behaviour without any extra state.
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (macros.isNotEmpty()) {
+                        MacroKeyRow(
+                            macros = macros,
+                            onMacroClick = { bridge.runMacro(it.steps) },
+                            onInteraction = { handleTerminalInteraction() },
+                        )
+                    }
+
+                    TerminalKeyboard(
+                        bridge = bridge,
+                        onInteraction = { handleTerminalInteraction() },
+                        onHideIme = {
+                            onShowSoftwareKeyboardChange(false)
+                        },
+                        onShowIme = {
+                            onShowSoftwareKeyboardChange(true)
+                        },
+                        onOpenTextInput = onTextInputRequest,
+                        onScrollInProgressChange = onKeyboardScrollInProgressChange,
+                        imeVisible = imeVisible,
+                        playAnimation = !hasPlayedKeyboardAnimation,
+                    )
+                }
             }
 
             val promptState by bridge.promptManager.promptState.collectAsState()
@@ -947,6 +971,7 @@ fun ConsoleScreen(
                                 forceSize = forceSize,
                                 termFocusRequester = termFocusRequester,
                                 showExtraKeyboard = showExtraKeyboard,
+                                macros = uiState.macros,
                                 hasPlayedKeyboardAnimation = hasPlayedKeyboardAnimation,
                                 imeVisible = imeVisible,
                                 handleTerminalInteraction = { handleTerminalInteraction(isTerminalTap = true) },

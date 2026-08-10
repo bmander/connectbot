@@ -957,6 +957,8 @@
 	<!-- Text for the "Ctrl" button in virtual keyboard. -->
 	<string name="button_key_ctrl">Ctrl</string>
 	<string name="button_key_shift">Shift</string>
+	<!-- Text for the "Alt" modifier, used when describing a macro key combination such as "Ctrl+Alt+F5". -->
+	<string name="button_key_alt">Alt</string>
 
 	<!-- Text for the "Home" button in virtual keyboard. -->
 	<string name="button_key_home">Home</string>
@@ -990,6 +992,70 @@
 	<string name="button_key_f11">F11</string>
 	<!-- Text for the "F12" button in virtual keyboard. -->
 	<string name="button_key_f12">F12</string>
+
+	<!-- Accessibility description for a user-defined macro button in the row above the virtual keyboard. %1$s is the macro's label. -->
+	<string name="macro_button_description">Run macro %1$s</string>
+
+	<!-- Title of the Macros entry in the Keyboard section of Settings, which opens the macro list screen. -->
+	<string name="pref_macros_title">Macros</string>
+	<!-- Summary under the Macros entry in the Keyboard section of Settings. -->
+	<string name="pref_macros_summary">Buttons above the key row that send key combos or text</string>
+
+	<!-- Title of the screen listing all user-defined macros. -->
+	<string name="macro_list_title">Macros</string>
+	<!-- Shown in the middle of the macro list screen when the user has not created any macros yet. -->
+	<string name="macro_list_empty">No macros yet. Tap + to create one.</string>
+	<!-- Accessibility description for the button that creates a new macro on the macro list screen. -->
+	<string name="macro_list_add">Add macro</string>
+	<!-- Menu item on a macro list row that moves the macro one place earlier in the on-screen row. -->
+	<string name="macro_list_move_up">Move up</string>
+	<!-- Menu item on a macro list row that moves the macro one place later in the on-screen row. -->
+	<string name="macro_list_move_down">Move down</string>
+	<!-- Title of the dialog confirming deletion of a macro. -->
+	<string name="macro_delete_confirm_title">Delete macro?</string>
+	<!-- Body of the dialog confirming deletion of a macro. %1$s is the macro's label. -->
+	<string name="macro_delete_confirm_message">Delete the macro \"%1$s\"?</string>
+
+	<!-- Title of the macro editor screen when creating a new macro. -->
+	<string name="macro_editor_title_new">New macro</string>
+	<!-- Title of the macro editor screen when editing an existing macro. -->
+	<string name="macro_editor_title_edit">Edit macro</string>
+	<!-- Label for the text field holding the text shown on the macro's on-screen button. -->
+	<string name="macro_editor_label">Button label</string>
+	<!-- Validation error shown when the user tries to save a macro without a button label. -->
+	<string name="macro_editor_label_required">Enter a button label</string>
+	<!-- Header above the list of steps in the macro editor. -->
+	<string name="macro_editor_steps">Steps</string>
+	<!-- Validation error shown when the user tries to save a macro with no steps. -->
+	<string name="macro_editor_steps_required">Add at least one step</string>
+	<!-- Button in the macro editor that opens the recorder to capture key presses. -->
+	<string name="macro_editor_record">Record keys</string>
+	<!-- Button in the macro editor that adds a literal-text step to the macro. -->
+	<string name="macro_editor_add_text">Add text</string>
+	<!-- Accessibility description for the control that moves a step one place earlier in the macro. -->
+	<string name="macro_editor_move_step_up">Move step up</string>
+	<!-- Accessibility description for the control that moves a step one place later in the macro. -->
+	<string name="macro_editor_move_step_down">Move step down</string>
+	<!-- Accessibility description for the control that deletes a step from the macro. -->
+	<string name="macro_editor_remove_step">Remove step</string>
+
+	<!-- Title of the dialog for adding or editing a literal-text macro step. -->
+	<string name="macro_text_step_title">Text step</string>
+	<!-- Label for the field holding the literal text a macro step types into the terminal. -->
+	<string name="macro_text_step_label">Text to send</string>
+	<!-- Hint under the text field explaining that Enter is added as a separate step rather than typed. -->
+	<string name="macro_text_step_hint">To press Enter afterwards, add an Enter key step.</string>
+
+	<!-- Title of the dialog that records macro steps from real key presses. -->
+	<string name="macro_recorder_title">Record keys</string>
+	<!-- Explains how the macro recorder works, shown above the recorded-step preview. -->
+	<string name="macro_recorder_hint">Press keys as you would in a terminal. Modifiers, the key row and the on-screen keyboard are all recorded.</string>
+	<!-- Placeholder shown in the recorder before the user has pressed anything. -->
+	<string name="macro_recorder_empty">Nothing recorded yet</string>
+	<!-- Button in the recorder that removes the most recently recorded key press. -->
+	<string name="macro_recorder_undo">Undo</string>
+	<!-- Button in the recorder that accepts the recorded key presses and closes the dialog. -->
+	<string name="macro_recorder_done">Done</string>
 
 	<!-- Button in virtual keyboard that opens text input dialog for composing longer text with full IME support -->
 	<string name="terminal_keyboard_text_input_button">Text input</string>

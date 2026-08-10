@@ -73,4 +73,7 @@ object DatabaseModule {
 
     @Provides
     fun provideProfileDao(database: ConnectBotDatabase) = database.profileDao()
+
+    @Provides
+    fun provideMacroDao(database: ConnectBotDatabase) = database.macroDao()
 }

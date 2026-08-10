@@ -1,6 +1,6 @@
 /*
  * ConnectBot: simple, powerful, open-source SSH client for Android
- * Copyright 2025 Kenny Root
+ * Copyright 2025-2026 Kenny Root
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,8 @@ import org.connectbot.ui.screens.help.HelpScreen
 import org.connectbot.ui.screens.hints.HintsScreen
 import org.connectbot.ui.screens.hosteditor.HostEditorScreen
 import org.connectbot.ui.screens.hostlist.HostListScreen
+import org.connectbot.ui.screens.macros.MacroEditorScreen
+import org.connectbot.ui.screens.macros.MacroListScreen
 import org.connectbot.ui.screens.portforwardlist.PortForwardListScreen
 import org.connectbot.ui.screens.profiles.ProfileEditorScreen
 import org.connectbot.ui.screens.profiles.ProfileListScreen
@@ -181,6 +183,7 @@ fun ConnectBotNavHost(
             val highlight = it.arguments?.getString("highlight")
             SettingsScreen(
                 onNavigateBack = { navController.safePopBackStack() },
+                onNavigateToMacros = { navController.navigateSafely(NavDestinations.MACROS) },
                 highlightItem = highlight,
             )
         }
@@ -240,6 +243,24 @@ fun ConnectBotNavHost(
                     navController.navigateSafely(NavDestinations.COLORS)
                 },
             )
+        }
+
+        composable(NavDestinations.MACROS) {
+            MacroListScreen(
+                onNavigateBack = { navController.safePopBackStack() },
+                onNavigateToEdit = { macroId ->
+                    navController.navigateSafely("${NavDestinations.MACRO_EDITOR}/$macroId")
+                },
+            )
+        }
+
+        composable(
+            route = "${NavDestinations.MACRO_EDITOR}/{${NavArgs.MACRO_ID}}",
+            arguments = listOf(
+                navArgument(NavArgs.MACRO_ID) { type = NavType.LongType },
+            ),
+        ) {
+            MacroEditorScreen(onNavigateBack = { navController.safePopBackStack() })
         }
 
         composable(NavDestinations.HELP) {

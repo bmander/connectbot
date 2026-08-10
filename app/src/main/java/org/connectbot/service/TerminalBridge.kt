@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.connectbot.R
 import org.connectbot.data.entity.Host
+import org.connectbot.data.entity.MacroStep
 import org.connectbot.data.entity.PortForward
 import org.connectbot.data.entity.Profile
 import org.connectbot.di.CoroutineDispatchers
@@ -223,6 +224,7 @@ class TerminalBridge {
     private var inGracePeriod: Boolean = false
 
     private val keyListener: TerminalKeyListener
+    private val macroExecutor: MacroExecutor
 
     var charWidth = -1
     var charHeight = -1
@@ -349,6 +351,15 @@ class TerminalBridge {
             else -> StickyModifierSetting.NONE
         }
         keyListener = TerminalKeyListener(TerminalEmulatorKeyDispatcher(terminalEmulator), stickyModifierSetting)
+
+        // Macros talk to the emulator directly rather than through keyListener: each step
+        // carries its own explicit modifiers, and pressing a macro must not consume the
+        // user's pending sticky Ctrl. Transients are still cleared once at the end so a
+        // stray modifier cannot leak into the next real keystroke.
+        macroExecutor = MacroExecutor(
+            TerminalEmulatorMacroSink(terminalEmulator),
+            onFinished = keyListener::clearTransients,
+        )
 
         // Start the transport operation processor to serialize all writes
         startTransportOperationProcessor()
@@ -1124,6 +1135,11 @@ class TerminalBridge {
      */
     val keyHandler: TerminalKeyListener
         get() = keyListener
+
+    /**
+     * Play a user-defined macro's steps against this session.
+     */
+    fun runMacro(steps: List<MacroStep>) = macroExecutor.run(steps)
 
     /**
      * Convenience function to increase the font size by a given step.

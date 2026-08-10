@@ -38,6 +38,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
@@ -70,6 +71,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -91,10 +93,15 @@ import org.connectbot.util.isNotificationPermissionGranted
 import org.xmlpull.v1.XmlPullParser
 import java.util.Locale
 
+object SettingsTestTags {
+    const val MACROS = "settings_macros"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToMacros: () -> Unit,
     modifier: Modifier = Modifier,
     highlightItem: String? = null,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -166,6 +173,7 @@ fun SettingsScreen(
     SettingsScreenContent(
         uiState = uiState,
         onNavigateBack = onNavigateBack,
+        onNavigateToMacros = onNavigateToMacros,
         highlightItem = highlightItem,
         onAuthOnLaunchChange = viewModel::updateAuthOnLaunch,
         onMemkeysChange = viewModel::updateMemkeys,
@@ -212,6 +220,7 @@ fun SettingsScreen(
 fun SettingsScreenContent(
     uiState: SettingsUiState,
     onNavigateBack: () -> Unit,
+    onNavigateToMacros: () -> Unit,
     onAuthOnLaunchChange: (Boolean) -> Unit,
     onMemkeysChange: (Boolean) -> Unit,
     onConnPersistChange: (Boolean) -> Unit,
@@ -572,6 +581,15 @@ fun SettingsScreenContent(
             }
 
             item {
+                NavigationPreference(
+                    title = stringResource(R.string.pref_macros_title),
+                    summary = stringResource(R.string.pref_macros_summary),
+                    onClick = onNavigateToMacros,
+                    modifier = Modifier.testTag(SettingsTestTags.MACROS),
+                )
+            }
+
+            item {
                 SwitchPreference(
                     title = stringResource(R.string.pref_shiftfkeys_title),
                     summary = stringResource(R.string.pref_shiftfkeys_summary),
@@ -807,6 +825,32 @@ private fun TextPreference(
                 },
             )
         }
+    }
+}
+
+/**
+ * A preference row that opens another screen rather than editing a value in place.
+ */
+@Composable
+private fun NavigationPreference(
+    title: String,
+    summary: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        ListItem(
+            headlineContent = { Text(title) },
+            supportingContent = { Text(summary) },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                )
+            },
+            modifier = Modifier.clickable(onClick = onClick),
+        )
+        HorizontalDivider()
     }
 }
 
@@ -1577,6 +1621,7 @@ private fun SettingsScreenPreview() {
                 fontImportError = null,
             ),
             onNavigateBack = {},
+            onNavigateToMacros = {},
             onAuthOnLaunchChange = {},
             onMemkeysChange = {},
             onConnPersistChange = {},

@@ -1,6 +1,6 @@
 /*
  * ConnectBot: simple, powerful, open-source SSH client for Android
- * Copyright 2025 Kenny Root
+ * Copyright 2025-2026 Kenny Root
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package org.connectbot.data
 
 import androidx.room.TypeConverter
 import org.connectbot.data.entity.KeyStorageType
+import org.connectbot.data.entity.MacroStepKind
 
 /**
  * Room type converters for custom types used in database entities.
@@ -29,4 +30,10 @@ class Converters {
 
     @TypeConverter
     fun toKeyStorageType(value: String): KeyStorageType = KeyStorageType.valueOf(value)
+
+    @TypeConverter
+    fun fromMacroStepKind(value: MacroStepKind): String = value.name
+
+    @TypeConverter
+    fun toMacroStepKind(value: String): MacroStepKind = MacroStepKind.valueOf(value)
 }

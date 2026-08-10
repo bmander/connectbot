@@ -32,6 +32,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.connectbot.data.MacroRepository
+import org.connectbot.data.entity.MacroWithSteps
 import org.connectbot.di.CoroutineDispatchers
 import org.connectbot.service.TerminalBridge
 import org.connectbot.service.TerminalManager
@@ -50,6 +52,8 @@ data class ConsoleUiState(
     // Progress state from OSC 9;4 escape sequences
     val progressState: ProgressState? = null,
     val progressValue: Int = 0,
+    // User-defined macro buttons, shown in a row above the terminal key row
+    val macros: List<MacroWithSteps> = emptyList(),
 )
 
 @HiltViewModel
@@ -58,6 +62,7 @@ class ConsoleViewModel @Inject constructor(
     private val dispatchers: CoroutineDispatchers,
     private val prefs: SharedPreferences,
     private val notificationPermissionHelper: NotificationPermissionHelper,
+    macroRepository: MacroRepository,
 ) : ViewModel() {
     private val hostId: Long = savedStateHandle.get<Long>("hostId") ?: -1L
     private var terminalManager: TerminalManager? = null
@@ -73,6 +78,14 @@ class ConsoleViewModel @Inject constructor(
 
     private val _networkStatusMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val networkStatusMessages: SharedFlow<String> = _networkStatusMessages.asSharedFlow()
+
+    init {
+        viewModelScope.launch {
+            macroRepository.observeAll().collect { macros ->
+                _uiState.update { it.copy(macros = macros) }
+            }
+        }
+    }
 
     fun shouldShowNotificationWarning(): Boolean {
         if (!prefs.contains(PreferenceConstants.NOTIFICATION_PERMISSION_DENIED)) return false
